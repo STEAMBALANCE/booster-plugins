@@ -1,0 +1,21 @@
+{
+  "name": "@booster-plugins/booster-addfunds",
+  "version": "0.0.7",
+  "private": true,
+  "description": "SteamBalance AddFunds plugin: enhances Steam store /steamaccount/addfunds page.",
+  "type": "module",
+  "scripts": {
+    "build": "bun run build.ts",
+    "test": "bun test"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "devDependencies": {
+    "@steambalance/booster-framework": "file:../../../booster-framework",
+    "bun-types": "^1.3.13",
+    "happy-dom": "^20.9.0",
+    "typesafe-i18n": "^5.26.0",
+    "typescript": "^5.5.0"
+  }
+}

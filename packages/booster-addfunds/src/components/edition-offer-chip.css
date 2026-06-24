@@ -1,0 +1,88 @@
+/* Edition offer chip — embedded inline in the first edition's purchase row.
+ * Scoped via #booster-edition-offer. Values come from the project design
+ * system (frame 319:908), NOT keys-block.css (which uses 12px/8px gaps — here it's 3/10). */
+#booster-edition-offer {
+  display: flex; align-items: center; gap: 3px;     /* 319:909 itemSpacing=3 */
+  margin-left: auto;                                 /* pin right inside .game_purchase_action */
+  background: #000; border-radius: 2px; padding: 3px;
+  box-sizing: border-box;
+  font-family: 'Motiva Sans', 'Nunito Sans', Arial, sans-serif;
+}
+#booster-edition-offer .booster-eo-discount {                  /* 319:910/911 */
+  background: #664cfe; color: #fff; font-weight: 500; font-size: 22px;
+  line-height: 16px; border-radius: 3px; padding: 7px 8px;
+}
+#booster-edition-offer .booster-eo-prices {                    /* 319:913: column, right-aligned */
+  display: flex; flex-direction: column; align-items: flex-end;
+  /* 319:912 has 8px horizontal + 7px vertical padding; the 7px vertical is
+   * intentionally dropped — it would push the 28px stack past the 30px design
+   * height. align-items:center on the chip handles vertical centering. */
+  color: #fff; padding: 0 8px;
+}
+#booster-edition-offer .booster-eo-was {                       /* 319:914 */
+  opacity: .5; font-size: 10px; line-height: 16px; text-decoration: line-through;
+}
+#booster-edition-offer .booster-eo-now {                       /* 319:915; itemSpacing -4 → overlap */
+  font-size: 12px; line-height: 16px; margin-top: -4px;
+}
+#booster-edition-offer .booster-eo-buy {                       /* 319:919/920 */
+  display: inline-flex; align-items: center; gap: 10px;   /* button itemSpacing=10 */
+  background: #34a37b; color: #fff; border: 0; cursor: pointer;
+  border-radius: 2px; padding: 7px 16px; font-weight: 500; font-size: 14px;
+  line-height: 16px;
+}
+#booster-edition-offer .booster-eo-buy:hover { filter: brightness(1.08); }
+#booster-edition-offer .booster-eo-buy-icon { display: inline-flex; align-items: center; width: 14px; height: 12px; }
+
+/* Host modifier: turn the FIRST edition's native action into a flex row so the
+ * native cluster sits left and our chip (margin-left:auto) pins right. The
+ * action's only native child is .game_purchase_action_bg (CDP-verified), and
+ * the discount countdown lives outside .game_purchase_action — so this is safe. */
+/* overflow:visible defends the interim «СКОРО» badge (which protrudes above the
+ * button) against the host clipping it; no effect on the live full chip, which
+ * doesn't overflow. Note: only THIS host node is under our control — native
+ * ancestors (.game_area_purchase_game …) still need an in-Steam QA pass. */
+.game_purchase_action.booster-dist-host { display: flex; align-items: center; text-align: left; overflow: visible; }
+
+/* ── INTERIM «СКОРО» (coming-soon) ────────────────────────────────────────────
+ * Active only while lib/coming-soon.ts::KEYS_COMING_SOON is true and the chip is
+ * built with { comingSoon: true }. Removing the flag (or that module) drops every
+ * rule below with no effect on the live full chip. The «СКОРО» pill (design:
+ * #664cfe, radius 3, padding 4/2, 10px/12px Medium white) sits centered on the
+ * button's TOP edge — its own centre on the edge, so it protrudes 50% upward —
+ * above the button by z-index; the button itself is dimmed 40% via ::after. */
+#booster-edition-offer.booster-eo--soon .booster-eo-buy {
+  /* position:relative WITHOUT a z-index is load-bearing: it makes the button the
+   * containing block for the badge + dim overlay, yet does NOT open a new stacking
+   * context — so the badge (z-index:2) paints above the dim (z-index:1) which
+   * paints above the button's auto-z bg/label. Don't add z-index/isolation here. */
+  position: relative;
+  overflow: visible;         /* let the badge protrude above the button */
+}
+/* 40% black dim over the whole button (background + label) — the «coming soon»
+ * de-emphasis. content:'' + inset:0; kept below the badge by z-index. */
+#booster-edition-offer.booster-eo--soon .booster-eo-buy::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+}
+#booster-edition-offer.booster-eo--soon .booster-eo-soon {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, -50%);   /* centre on the button's top edge */
+  z-index: 2;                          /* above the dim overlay + button content */
+  background: #664cfe;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+  pointer-events: none;
+}

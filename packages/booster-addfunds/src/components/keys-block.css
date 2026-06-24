@@ -1,0 +1,70 @@
+#booster-keys-block {
+  margin: 24px 0 32px 0;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: 'Motiva Sans', 'Nunito Sans', Arial, sans-serif;
+}
+#booster-keys-block .booster-keys-title {
+  font-weight: 700; font-size: 32px; line-height: 32px; color: #fff;
+  /* 32px gap between our title and the rows (per keys-for-region.xml). */
+  margin: 0 0 32px 0;
+}
+#booster-keys-block .booster-keys-list {
+  display: flex; flex-direction: column;
+  /* Rows carry a chip that protrudes ~18px below; keep rows from colliding
+   * (single row in the mock; spacing covers the multi-row case too). */
+  gap: 28px;
+  /* Room for the last row's protruding chip. */
+  padding-bottom: 18px;
+}
+#booster-keys-block .booster-keys-row {
+  position: relative;               /* anchor for the absolute chip + os icon */
+  min-height: 64px;
+  padding: 14px 24px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #2c3c49 0%, #576674 100%);
+  box-sizing: border-box;
+  display: flex; align-items: center;
+}
+#booster-keys-block .booster-keys-name {
+  font-weight: 700; font-size: 20px; line-height: 24px; color: #fff;
+  /* Keep the name clear of the chip overlapping the right side. */
+  padding-right: 280px;
+}
+#booster-keys-block .booster-keys-os {
+  position: absolute; top: 14px; right: 24px;
+  display: inline-flex; align-items: center; color: #fff;
+  width: 24px; height: 24px;
+}
+/* Black chip with the discount/price/buy cluster — bottom-right, straddling
+ * the row's bottom edge so it protrudes downward (per the design). */
+#booster-keys-block .booster-keys-actions {
+  position: absolute; right: 24px; bottom: -18px;
+  display: flex; align-items: center; gap: 12px;
+  background: #000; border-radius: 2px; padding: 3px;
+}
+#booster-keys-block .booster-keys-discount {
+  background: #664cfe; color: #fff; font-weight: 500; font-size: 22px;
+  line-height: 16px; border-radius: 3px; padding: 7px 8px;
+}
+#booster-keys-block .booster-keys-prices {
+  display: flex; flex-direction: column; align-items: flex-end;
+  line-height: 1; color: #fff;
+}
+#booster-keys-block .booster-keys-orig {
+  opacity: .5; font-size: 10px; text-decoration: line-through; color: #fff;
+}
+#booster-keys-block .booster-keys-price {
+  font-size: 12px; color: #fff;
+}
+#booster-keys-block .booster-keys-buy {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #34a37b; color: #fff; border: 0; cursor: pointer;
+  border-radius: 2px; padding: 7px 16px; font-weight: 500; font-size: 14px;
+  line-height: 16px;
+}
+#booster-keys-block .booster-keys-buy:hover { filter: brightness(1.08); }
+#booster-keys-block .booster-keys-buy-icon {
+  display: inline-flex; align-items: center;
+  width: 14px; height: 12px;
+}

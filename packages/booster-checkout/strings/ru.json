@@ -1,0 +1,60 @@
+{
+  "checkout": {
+    "popup": {
+      "button_label":        "Пополнить",
+      "button_tooltip":      "Пополнить баланс Steam",
+      "window_title":        "Пополнение аккаунта {login:string}",
+      "window_title_no_login": "Пополнение аккаунта",
+      "support_window_title": "Поддержка SteamBalance",
+      "orders_window_title": "Мои заказы — SteamBalance",
+      "faq_window_title": "SteamBooster FAQ"
+    },
+    "header": {
+      "menu_button": "МЕНЮ"
+    },
+    "menu": {
+      "support":   "ПОДДЕРЖКА",
+      "my_orders": "МОИ ЗАКАЗЫ",
+      "settings":  "НАСТРОЙКИ"
+    },
+    "footer": {
+      "secure_note": "Безопасно и конфиденциально"
+    },
+    "amount": {
+      "placeholder": "Введите сумму"
+    },
+    "info_row": {
+      "login":          "Логин:",
+      "receive":        "Получите:",
+      "total_will_be":  "Итого на балансе будет"
+    },
+    "pay_button": {
+      "default":          "Оплатить",
+      "submitting":       "Загрузка...",
+      "calculating":      "Расчёт...",
+      "network_error":    "Ошибка сети",
+      "calc_error":       "Ошибка расчёта",
+      "ready":            "Оплатить {amount:string} ₽",
+      "desired_too_low":  "Желаемый баланс ниже текущего"
+    },
+    "total_input": {
+      "placeholder": "Желаемый баланс"
+    },
+    "error_screen": {
+      "title":    "Не удалось загрузить методы оплаты",
+      "subtitle": "Попробуйте позже",
+      "retry":    "Обновить"
+    },
+    "payment_methods_error_toast": "Не удалось загрузить методы оплаты",
+    "pay_error": {
+      "title":      "Упс!",
+      "faq":        "FAQ",
+      "support":    "Написать в поддержку",
+      "close_aria": "Закрыть",
+      "generic":    "Не удалось обработать запрос. Попробуйте позже или обратитесь в поддержку."
+    }
+  },
+  "general": {
+    "product_display_name": "SteamBooster"
+  }
+}

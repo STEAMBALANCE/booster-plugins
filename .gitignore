@@ -1,0 +1,27 @@
+# Node / bun
+node_modules/
+**/node_modules/
+bun.lock
+bun.lockb
+.bun/
+
+# Build outputs (per-package)
+dist/
+out/
+build/
+packages/*/dist/
+packages/*/out/
+packages/*/build/
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Watch-test trigger files (written by build-watch.test.ts, cleaned up in afterAll but may linger)
+packages/booster-checkout/src/__watch_test_trigger__.ts
+packages/booster-checkout/popup-svelte/__watch_test_trigger__.svelte
+packages/booster-addfunds/src/__watch_test_trigger__.ts

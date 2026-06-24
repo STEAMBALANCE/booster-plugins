@@ -1,0 +1,56 @@
+#booster-topup-bar {
+  /* Top edge alignment with Steam's right-column "ВАШ АККАУНТ STEAM"
+   * block — Steam puts a 16px margin-top on .rightcol > .block, so
+   * without a matching margin-top here our row sat 16px higher than
+   * the right block (misalignment QA flagged 2026-05-21). Mirroring
+   * Steam's offset on our own row (instead of touching its CSS) keeps
+   * the override contained to this scoped block. */
+  margin: 16px 0 8px 0;
+  padding: 24px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #1c5742 0%, #34a37b 100%);
+  width: 780px; max-width: 100%;
+  box-sizing: border-box;
+}
+#booster-topup-bar .booster-topup-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; height: 36px;
+}
+#booster-topup-bar .booster-topup-left {
+  display: flex; align-items: center; gap: 16px;
+}
+#booster-topup-bar .booster-topup-logo {
+  display: block; height: 18px; width: auto; max-width: 120px; object-fit: contain;
+}
+#booster-topup-bar .booster-topup-label {
+  font-family: 'Nunito Sans', 'Motiva Sans', Arial, sans-serif;
+  font-weight: 700; font-size: 18px; line-height: 16px; color: #fff;
+}
+#booster-topup-bar .booster-topup-right {
+  display: flex; align-items: center; gap: 0;
+  background: #000; border-radius: 2px; padding: 2px 2px 2px 12px;
+  height: 36px; box-sizing: border-box;
+}
+#booster-topup-bar .booster-topup-input-wrap {
+  display: flex; align-items: center; gap: 8px;
+}
+#booster-topup-bar .booster-topup-input {
+  width: 90px; background: transparent; border: 0; outline: none;
+  font-family: 'Nunito Sans', 'Motiva Sans', Arial, sans-serif;
+  font-weight: 700; font-size: 14px; line-height: 16px; color: #fff;
+  text-align: left; padding: 0;
+}
+#booster-topup-bar .booster-topup-input::placeholder { color: rgba(255,255,255,0.5); }
+#booster-topup-bar .booster-topup-symbol {
+  font-family: 'Nunito Sans', 'Motiva Sans', Arial, sans-serif;
+  font-weight: 700; font-size: 14px; color: #fff;
+}
+#booster-topup-bar .booster-topup-submit {
+  margin-left: 8px; border: 0; cursor: pointer;
+  padding: 8px 12px; border-radius: 2px;
+  background: linear-gradient(180deg, #799905 0%, #536904 100%);
+  font-family: 'Nunito Sans', 'Motiva Sans', Arial, sans-serif;
+  font-weight: 700; font-size: 14px; line-height: 16px; color: #c6dc77;
+  height: 32px;
+}
+#booster-topup-bar .booster-topup-submit:hover { color: #fff; }

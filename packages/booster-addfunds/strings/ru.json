@@ -1,0 +1,17 @@
+{
+  "addfunds": {
+    "row_label":            "Пополнение баланса",
+    "submit_button":        "Пополнить",
+    "row_aria_label":       "Пополнить баланс через SteamBalance",
+    "cart_heading":         "Вам не хватает баланса",
+    "keys_block_title":     "У нас имеются ключи для игры в вашем регионе!",
+    "keys_buy_button":      "Купить",
+    "keys_row_label":       "Купить {gameName:string}",
+    "keys_block_aria_label":"Доступные ключи для покупки в вашем регионе",
+    "edition_offer_aria_label": "Предложение SteamBalance — купить дешевле",
+    "edition_offer_soon_badge": "СКОРО"
+  },
+  "general": {
+    "product_display_name": "SteamBooster"
+  }
+}

@@ -1,0 +1,78 @@
+name: test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/**'
+      - 'scripts/**'
+      - 'tools/**'
+      - 'package.json'
+      - 'bun.lock'
+      - 'tsconfig.json'
+      - '.github/workflows/test.yml'
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout booster-plugins
+        uses: actions/checkout@v6
+        with:
+          path: booster-plugins
+
+      # Sibling clone — public repo, tokenless clone. The on-disk
+      # packages/*/package.json already use file: links to ../booster-framework,
+      # so no dep rewrite is needed before bun install.
+      - name: Sibling clone booster-framework
+        run: |
+          git clone --depth=1 https://github.com/STEAMBALANCE/booster-framework.git booster-framework
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies (booster-framework)
+        working-directory: booster-framework
+        run: bun install
+
+      - name: Generate strings (booster-framework)
+        working-directory: booster-framework
+        run: bun run scripts/gen-strings.ts
+
+      - name: Build booster-framework (so file:../booster-framework resolves dist/)
+        working-directory: booster-framework
+        run: bun run build
+
+      - name: Install dependencies (booster-plugins)
+        working-directory: booster-plugins
+        run: bun install
+
+      - name: Generate strings (workspace-wide)
+        working-directory: booster-plugins
+        run: bun run scripts/gen-strings.ts
+
+      # Tests run per-package so each package's bunfig.toml is picked up
+      # (booster-checkout's registers bun-plugin-svelte + happy-dom via its
+      # [test] preload — required for the popup-svelte runes tests to
+      # compile). A bare `bun test` from the monorepo root skips those
+      # per-package bunfigs and the Svelte tests fail with `$state is not
+      # defined`. Mirrors the canonical `just test` flow (bun test --cwd …).
+      - name: Run tests (booster-checkout)
+        working-directory: booster-plugins
+        run: bun test --cwd packages/booster-checkout
+
+      - name: Run tests (booster-addfunds)
+        working-directory: booster-plugins
+        run: bun test --cwd packages/booster-addfunds
+
+      - name: Build booster-checkout
+        working-directory: booster-plugins
+        run: bun run --filter '@booster-plugins/booster-checkout' build
+
+      - name: Build booster-addfunds
+        working-directory: booster-plugins
+        run: bun run --filter '@booster-plugins/booster-addfunds' build

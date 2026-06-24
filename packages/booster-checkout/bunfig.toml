@@ -1,0 +1,14 @@
+# payload/bunfig.toml
+#
+# Bun runtime config scoped to this workspace. The [test] section lists
+# preload scripts that run before any test file is loaded — we use it to
+# register bun-plugin-svelte so `.svelte.ts` modules (Svelte 5 runes)
+# compile during `bun test`. The same preload installs the three
+# `__SB_*_VERSION__` build-define names on `globalThis` so popup helpers
+# that reference them (e.g. lib/headers.ts) resolve at test runtime to
+# "0.0.0-dev" — bun's bundler `define` is build-time-only and does not
+# apply to `bun test`. Production builds (build.ts) register the Svelte
+# plugin and pass the version defines via Bun.build({define:…}).
+
+[test]
+preload = ["./tests/setup-svelte-plugin.ts"]

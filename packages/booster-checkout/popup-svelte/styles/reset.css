@@ -1,0 +1,10 @@
+/* payload/popup-svelte/styles/reset.css */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  background: var(--booster-surface-0);
+  font-family: var(--booster-font-stack);
+  color: var(--booster-text-primary);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}

@@ -1,0 +1,96 @@
+name: release-plugin
+
+on:
+  push:
+    tags:
+      - 'booster-checkout-v*'
+      - 'booster-addfunds-v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout booster-plugins
+        uses: actions/checkout@v6
+        with:
+          path: booster-plugins
+
+      # Sibling clone booster-framework — public repo, tokenless clone.
+      - name: Sibling clone booster-framework
+        run: |
+          git clone --depth=1 https://github.com/STEAMBALANCE/booster-framework.git booster-framework
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Parse tag into package name + version
+        id: pkg
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          PKG="${TAG%-v*}"
+          VER="${TAG#${PKG}-v}"
+          echo "name=${PKG}" >> "$GITHUB_OUTPUT"
+          echo "ver=${VER}"  >> "$GITHUB_OUTPUT"
+          echo "Parsed tag '$TAG' -> name=$PKG ver=$VER"
+
+      # Per Phase F errata I4: tag-vs-package.json version verify.
+      - name: Verify tag matches package.json version
+        env:
+          PKG_NAME: ${{ steps.pkg.outputs.name }}
+          TAG_VER: ${{ steps.pkg.outputs.ver }}
+        run: |
+          PKG_VER=$(jq -r .version "booster-plugins/packages/${PKG_NAME}/package.json")
+          if [ "$TAG_VER" != "$PKG_VER" ]; then
+            echo "::error::Tag ${PKG_NAME}-v${TAG_VER} does not match packages/${PKG_NAME}/package.json version $PKG_VER"
+            exit 1
+          fi
+          echo "Tag ${PKG_NAME}-v${TAG_VER} matches packages/${PKG_NAME}/package.json version $PKG_VER"
+
+      - name: Install dependencies (booster-framework)
+        working-directory: booster-framework
+        run: bun install
+
+      - name: Generate strings (booster-framework)
+        working-directory: booster-framework
+        run: bun run scripts/gen-strings.ts
+
+      - name: Build booster-framework
+        working-directory: booster-framework
+        run: bun run build
+
+      - name: Install dependencies (booster-plugins)
+        working-directory: booster-plugins
+        run: bun install
+
+      - name: Generate strings (booster-plugins)
+        working-directory: booster-plugins
+        run: bun run scripts/gen-strings.ts
+
+      - name: Build plugin (production)
+        working-directory: booster-plugins
+        env:
+          SB_PRODUCTION: '1'
+        run: bun run --filter '@booster-plugins/${{ steps.pkg.outputs.name }}' build
+
+      - name: Compute checksum
+        env:
+          PKG_NAME: ${{ steps.pkg.outputs.name }}
+          VER: ${{ steps.pkg.outputs.ver }}
+        run: |
+          cd "booster-plugins/packages/${PKG_NAME}/out"
+          sha256sum "${PKG_NAME}-${VER}.js" > "${PKG_NAME}-${VER}.js.sha256"
+          ls -la
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            booster-plugins/packages/${{ steps.pkg.outputs.name }}/out/${{ steps.pkg.outputs.name }}-${{ steps.pkg.outputs.ver }}.js
+            booster-plugins/packages/${{ steps.pkg.outputs.name }}/out/${{ steps.pkg.outputs.name }}-${{ steps.pkg.outputs.ver }}.js.map
+            booster-plugins/packages/${{ steps.pkg.outputs.name }}/out/${{ steps.pkg.outputs.name }}-${{ steps.pkg.outputs.ver }}.js.sha256
+          generate_release_notes: true
+          fail_on_unmatched_files: false

@@ -1,0 +1,72 @@
+/* payload/popup-svelte/styles/tokens.css */
+:root {
+  /* Brand */
+  --booster-brand-green:        #34a37b;
+  --booster-brand-green-hover:  #3eb487;
+  --booster-brand-green-active: #2a8c69;
+  --booster-total-green:        #2ee4a2;
+  --booster-soon-green:         #93e0ad;
+  --booster-soon-bg:            #93e0ad1a;
+
+  /* Surface */
+  --booster-surface-0:          #25282e;
+  --booster-surface-1:          #2b2b37;
+  --booster-surface-2:          #3d4450;
+  --booster-surface-3:          #21212c;
+  --booster-surface-hover:      #48505c;
+  --booster-divider:            #0000000d;
+  /* Steam-native popups carry a 1px black border on the window edge.
+   * Verified live against the Notifications Menu CDP target: the inner
+   * panel is 0.8px solid #000 over #25282e + radial-gradient highlight
+   * at top-left. Browsers can't draw 0.8px reliably (sub-pixel borders
+   * are renderer-dependent), so we widen to 1px (visually identical at
+   * 100% DPI scale) and pair with the inset highlight shadow on .root
+   * to match the native frame. */
+  --booster-popup-stroke:       #000000;
+  /* Native Notifications-popup highlight: radial gradient + inset
+   * shadows lifted directly from Steam's computed style on the inner
+   * popup div. The radial gives a subtle "lit from top-left" sheen;
+   * the inset shadow pair (bright TL + darker BR) draws the 1px
+   * inner frame that sits below the black outer border. */
+  --booster-popup-bg-highlight: radial-gradient(circle at left top, rgba(74, 81, 92, 0.4) 0%, rgba(75, 81, 92, 0) 60%);
+  --booster-popup-inset-shadow: inset 1px 1px 1px 0 rgba(61, 68, 80, 0.75), inset -1px -1px 1px 0 rgba(61, 68, 80, 0.25);
+  /* Pay-error modal: full-cover scrim (#171D25 at ~90% alpha via the
+   * E5 hex) + card surface, both lifted from modal-design.xml. */
+  --booster-modal-scrim:   #171d25e5;
+  --booster-modal-surface: #2d333c;
+
+  /* Text */
+  --booster-text-primary:       #ffffff;
+  --booster-text-secondary:     #67707b;
+  --booster-text-muted:         rgba(255, 255, 255, 0.3);
+
+  /* Typography — Motiva Sans is Steam's native UI face. We deliberately
+   * do NOT ship a custom brand webfont: the popup must be visually
+   * indistinguishable from Steam's own popups (Notifications, Friends),
+   * so we inherit Motiva from Steam's runtime instead of layering a
+   * brand face on top.
+   *
+   * Weight availability in Steam's runtime (verified via
+   * `document.fonts.check('<W> 14px "Motiva Sans"')` on a live CDP
+   * target): only 400 (Regular) and 700 (Bold) are LOADED. The Figma
+   * design specifies 500 (Medium) for several secondary-text slots
+   * (Footer copy, InfoRow labels, TotalBox label); we intentionally
+   * keep `font-weight: 500` in those rules so the CSS still expresses
+   * design intent, but at render time CSS Fonts L4 substitution will
+   * fall back to 400 (closest lighter available weight). 600 maps to
+   * the loaded 700. This mirrors Steam's own popups which also only
+   * use 400/700 in practice — matching the runtime is more important
+   * than literal Figma-weight fidelity. */
+  --booster-font-stack: 'Motiva Sans', Arial, Helvetica, sans-serif;
+  /* Weight tokens — semantic names so a future "switch all 500 → 700"
+   * (or shipping a Medium woff2) is a single-line edit. Match the
+   * Figma weights as authored, even where the runtime substitutes
+   * (see comment above). */
+  --booster-fw-medium: 500;
+  --booster-fw-bold:   700;
+
+  /* Geometry — popup root is sharp-cornered to match Steam Notifications. */
+  --booster-radius-sm: 2px;
+  --booster-radius-md: 4px;
+  --booster-radius-pill: 12px;
+}
