@@ -12,6 +12,9 @@ export const URLS = {
   balanceAddApi:      'https://steambalance.cc/api/balance/add',
   orders:             'https://steambalance.cc/booster/orders',
   faq:                'https://steambalance.cc/booster/faq',
+  terms:              'https://steambalance.cc/booster/terms',
+  privacy:            'https://steambalance.cc/booster/privacy',
+  telegram:           'https://steambalance.cc/c/0eb9',
   paymentImagesBase:  'https://steambalance.cc/assets/images/payments',
   // Logo click-through link (brand site home). NOT the image source —
   // the popup renders the logo from a build-time data-URI (IMG_LOGO_DATA_URI).

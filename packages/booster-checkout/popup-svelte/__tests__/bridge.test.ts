@@ -36,7 +36,7 @@ class InMemoryBC extends EventTarget {
 
 import {
   initBridge, postSupport, postMenuAction, payAndNavigate, _resetForTest,
-  postRefreshPaymentMethods, postFaq,
+  postRefreshPaymentMethods, postFaq, postOpenDoc,
 } from '../lib/bridge';
 import {
   _setMethodHealHandler, type PaymentMethod,
@@ -67,6 +67,7 @@ beforeEach(() => {
   ui.userLogin = ''; ui.userCurrency = null; ui.userBalance = null;
   ui.urls.support = ''; ui.urls.popupLogoLink = '';
   ui.urls.balanceCalcApi = ''; ui.urls.balanceAddApi = '';
+  ui.urls.telegram = '';
   ui.paymentMethods = []; ui.paymentMethodsLoading = false; ui.paymentMethodsError = null;
   ui.initSeen = false; ui.emailReceived = false;
   ui.pendingPay = false;
@@ -816,12 +817,33 @@ test('shown with prefillAmount overrides any prior ui.amount even when non-zero'
   expect(ui.amount).toBe(5000);
 });
 
-test('postFaq posts a faq popup-message envelope', () => {
+test('postFaq posts an open-doc faq popup-message envelope', () => {
   const cap = captureOutgoing();
   postFaq();
-  const faq = cap.messages.find(m => m.kind === 'faq');
-  expect(faq).toBeTruthy();
+  const m = cap.messages.find(x => x.kind === 'open-doc');
+  expect(m).toBeTruthy();
+  expect((m!.data as any).doc).toBe('faq');
   cap.bc.close();
+});
+
+test('postOpenDoc posts {kind:open-doc, doc} for each doc', () => {
+  for (const doc of ['terms', 'privacy', 'faq'] as const) {
+    const cap = captureOutgoing();
+    postOpenDoc(doc);
+    const m = cap.messages.find(x => x.kind === 'open-doc');
+    expect(m).toBeTruthy();
+    expect((m!.data as any).doc).toBe(doc);
+    cap.bc.close();
+  }
+});
+
+test('init forwards urls.telegram into ui.urls.telegram', () => {
+  postFromOutside({
+    kind: 'init', login: 'u', currency: 'RUB', balance: 0,
+    urls: { support: '', popupLogoLink: '', telegram: 'https://steambalance.cc/c/0eb9',
+            balanceCalcApi: '', balanceAddApi: '' },
+  });
+  expect(ui.urls.telegram).toBe('https://steambalance.cc/c/0eb9');
 });
 
 test('resetTransientUI (via hidden) clears ui.payError', () => {

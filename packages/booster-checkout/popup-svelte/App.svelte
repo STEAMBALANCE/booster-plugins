@@ -17,7 +17,7 @@
   import { scheduleCalc } from './lib/api';
   import { scheduleDesiredCommit, cancelDesiredCommit } from './lib/desired-debounce';
   import {
-    postSupport, postMenuAction, payAndNavigate, postRefreshPaymentMethods, postFaq,
+    postSupport, postMenuAction, payAndNavigate, postRefreshPaymentMethods, postFaq, postOpenDoc,
   } from './lib/bridge';
   import { LL } from '../src/i18n';
 
@@ -255,9 +255,14 @@
     <div class="menu-overlay">
       <MenuDropdown
         supportUrl={ui.urls.support}
+        telegramUrl={ui.urls.telegram}
         showSettings={false}
-        onSupport={() => { ui.menuOpen = false; postSupport(); }}
         onOrders={() => { ui.menuOpen = false; postMenuAction('orders'); }}
+        onSupport={() => { ui.menuOpen = false; postSupport(); }}
+        onTelegram={() => { ui.menuOpen = false; }}
+        onTerms={() => { ui.menuOpen = false; postOpenDoc('terms'); }}
+        onPrivacy={() => { ui.menuOpen = false; postOpenDoc('privacy'); }}
+        onFaq={() => { ui.menuOpen = false; postOpenDoc('faq'); }}
         onSettings={() => { ui.menuOpen = false; postMenuAction('settings'); }}
       />
     </div>

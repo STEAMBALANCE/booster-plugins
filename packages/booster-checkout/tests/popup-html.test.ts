@@ -127,6 +127,9 @@ test('all user-visible Russian labels survive minify', () => {
     expect(html).toContain('ПОДДЕРЖКА');
     expect(html).toContain('МОИ ЗАКАЗЫ');
     expect(html).toContain('НАСТРОЙКИ');
+    expect(html).toContain('ТЕЛЕГРАМ');
+    expect(html).toContain('СОГЛАШЕНИЕ');
+    expect(html).toContain('ПОЛИТИКА');
   }
 });
 
@@ -181,6 +184,8 @@ test('wire-protocol strings survive build (BC channel + popup id + kinds)', () =
     // menu-action sub-actions
     expect(html).toContain('orders');
     expect(html).toContain('settings');
+    // Outbound doc-window kind (новый провод; дискриминаторы — в bridge/menu юнит-тестах)
+    expect(html).toContain('open-doc');
   }
 });
 

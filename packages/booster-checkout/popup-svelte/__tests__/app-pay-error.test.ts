@@ -36,7 +36,7 @@ test('App FAQ button clears payError and posts a faq message', async () => {
   btns[0].click();  // FAQ
   await h.flush();
   expect(ui.payError).toBeNull();
-  expect(seen.some(m => m?.kind === 'popup-message' && m?.data?.kind === 'faq')).toBe(true);
+  expect(seen.some(m => m?.kind === 'popup-message' && m?.data?.kind === 'open-doc' && m?.data?.doc === 'faq')).toBe(true);
   peer.close(); h.close();
 });
 

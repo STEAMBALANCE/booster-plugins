@@ -75,7 +75,8 @@ export const ui = $state({
   // populates these on the {kind:'init'} envelope.
   urls: {
     support:        '',
-    popupLogoLink:      '',
+    popupLogoLink:  '',
+    telegram:       '',
     balanceCalcApi: '',
     balanceAddApi:  '',
   },

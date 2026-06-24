@@ -105,10 +105,13 @@ export async function buildSveltePopup(opts: BuildSveltePopupOptions): Promise<s
         __SB_ICON_CHECK__:        readSvgAsDefine(join(opts.iconBaseDir, 'check.svg')),
         __SB_ICON_CHEVRON_DOWN__: readSvgAsDefine(join(opts.iconBaseDir, 'chevron-down.svg')),
         __SB_ICON_CLOSE__:        readSvgAsDefine(join(opts.iconBaseDir, 'close.svg')),
+        __SB_ICON_DOCUMENT__:     readSvgAsDefine(join(opts.iconBaseDir, 'document.svg')),
+        __SB_ICON_FAQ__:          readSvgAsDefine(join(opts.iconBaseDir, 'faq.svg')),
         __SB_ICON_GEAR__:         readSvgAsDefine(join(opts.iconBaseDir, 'gear.svg')),
         __SB_ICON_SAFETY__:       readSvgAsDefine(join(opts.iconBaseDir, 'safety.svg')),
         __SB_ICON_SETTINGS__:     readSvgAsDefine(join(opts.iconBaseDir, 'settings.svg')),
         __SB_ICON_SUPPORT__:      readSvgAsDefine(join(opts.iconBaseDir, 'support.svg')),
+        __SB_ICON_TELEGRAM__:     readSvgAsDefine(join(opts.iconBaseDir, 'telegram.svg')),
         __SB_IMG_LOGO_DATA_URI__: readPngAsDataUriDefine(join(opts.imageBaseDir, 'logo.png')),
         // The plugin's own version, baked for popup-svelte/lib/headers.ts.
         // Injector + framework versions are deliberately NOT baked (they

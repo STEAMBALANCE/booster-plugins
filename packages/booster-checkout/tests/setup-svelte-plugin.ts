@@ -102,8 +102,9 @@ plugin(SveltePlugin({ development: true, forceSide: 'client' }));
 for (const name of [
   '__SB_ICON_BOX__', '__SB_ICON_CHECK__', '__SB_ICON_CHEVRON_DOWN__',
   '__SB_ICON_CLOSE__',
-  '__SB_ICON_GEAR__', '__SB_ICON_SAFETY__', '__SB_ICON_SETTINGS__',
-  '__SB_ICON_SUPPORT__', '__SB_IMG_LOGO_DATA_URI__',
+  '__SB_ICON_DOCUMENT__', '__SB_ICON_FAQ__', '__SB_ICON_GEAR__',
+  '__SB_ICON_SAFETY__', '__SB_ICON_SETTINGS__', '__SB_ICON_SUPPORT__',
+  '__SB_ICON_TELEGRAM__', '__SB_IMG_LOGO_DATA_URI__',
 ]) {
   if ((globalThis as any)[name] === undefined) (globalThis as any)[name] = '';
 }

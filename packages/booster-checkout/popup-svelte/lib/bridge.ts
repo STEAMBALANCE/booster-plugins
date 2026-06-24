@@ -151,7 +151,8 @@ function handleIncoming(d: Record<string, unknown>): void {
     if (urls && typeof urls === 'object') {
       const u = urls as Record<string, unknown>;
       if (typeof u.support        === 'string') ui.urls.support        = u.support;
-      if (typeof u.popupLogoLink      === 'string') ui.urls.popupLogoLink      = u.popupLogoLink;
+      if (typeof u.popupLogoLink  === 'string') ui.urls.popupLogoLink  = u.popupLogoLink;
+      if (typeof u.telegram       === 'string') ui.urls.telegram       = u.telegram;
       if (typeof u.balanceCalcApi === 'string') ui.urls.balanceCalcApi = u.balanceCalcApi;
       if (typeof u.balanceAddApi  === 'string') ui.urls.balanceAddApi  = u.balanceAddApi;
     }
@@ -295,9 +296,14 @@ export function postSupport(): void {
   bc.postMessage({ kind: 'popup-message', popupId: POPUP_ID, data: { kind: 'support' } });
 }
 
-export function postFaq(): void {
+export function postOpenDoc(doc: 'terms' | 'privacy' | 'faq'): void {
   if (!bc) return;
-  bc.postMessage({ kind: 'popup-message', popupId: POPUP_ID, data: { kind: 'faq' } });
+  bc.postMessage({ kind: 'popup-message', popupId: POPUP_ID, data: { kind: 'open-doc', doc } });
+}
+
+// PayErrorModal's «FAQ» — тонкий алиас над единым open-doc путём.
+export function postFaq(): void {
+  postOpenDoc('faq');
 }
 
 export function postMenuAction(action: 'orders' | 'settings'): void {

@@ -25,9 +25,13 @@ const ru = {
       total_will_be: 'Итого на балансе будет',
     },
     menu: {
+      faq: 'FAQ',
       my_orders: 'МОИ ЗАКАЗЫ',
+      privacy: 'ПОЛИТИКА',
       settings: 'НАСТРОЙКИ',
       support: 'ПОДДЕРЖКА',
+      telegram: 'ТЕЛЕГРАМ',
+      terms: 'СОГЛАШЕНИЕ',
     },
     pay_button: {
       calc_error: 'Ошибка расчёта',
@@ -51,7 +55,9 @@ const ru = {
       button_tooltip: 'Пополнить баланс Steam',
       faq_window_title: 'SteamBooster FAQ',
       orders_window_title: 'Мои заказы — SteamBalance',
+      privacy_window_title: 'Политика конфиденциальности — SteamBalance',
       support_window_title: 'Поддержка SteamBalance',
+      terms_window_title: 'Пользовательское соглашение — SteamBalance',
       window_title: 'Пополнение аккаунта {login:string}',
       window_title_no_login: 'Пополнение аккаунта',
     },

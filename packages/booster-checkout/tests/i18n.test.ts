@@ -43,4 +43,13 @@ describe('checkout namespace strings', () => {
     expect(LL.checkout.pay_error.generic().length).toBeGreaterThan(0);
     expect(LL.checkout.popup.faq_window_title()).toBe('SteamBooster FAQ');
   });
+
+  test('new menu + doc-window strings resolve', () => {
+    expect(LL.checkout.menu.telegram()).toBe('ТЕЛЕГРАМ');
+    expect(LL.checkout.menu.terms()).toBe('СОГЛАШЕНИЕ');
+    expect(LL.checkout.menu.privacy()).toBe('ПОЛИТИКА');
+    expect(LL.checkout.menu.faq()).toBe('FAQ');
+    expect(LL.checkout.popup.terms_window_title()).toBe('Пользовательское соглашение — SteamBalance');
+    expect(LL.checkout.popup.privacy_window_title()).toBe('Политика конфиденциальности — SteamBalance');
+  });
 });

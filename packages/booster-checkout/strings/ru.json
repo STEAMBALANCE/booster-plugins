@@ -7,7 +7,9 @@
       "window_title_no_login": "Пополнение аккаунта",
       "support_window_title": "Поддержка SteamBalance",
       "orders_window_title": "Мои заказы — SteamBalance",
-      "faq_window_title": "SteamBooster FAQ"
+      "faq_window_title": "SteamBooster FAQ",
+      "terms_window_title": "Пользовательское соглашение — SteamBalance",
+      "privacy_window_title": "Политика конфиденциальности — SteamBalance"
     },
     "header": {
       "menu_button": "МЕНЮ"
@@ -15,7 +17,11 @@
     "menu": {
       "support":   "ПОДДЕРЖКА",
       "my_orders": "МОИ ЗАКАЗЫ",
-      "settings":  "НАСТРОЙКИ"
+      "settings":  "НАСТРОЙКИ",
+      "telegram":  "ТЕЛЕГРАМ",
+      "terms":     "СОГЛАШЕНИЕ",
+      "privacy":   "ПОЛИТИКА",
+      "faq":       "FAQ"
     },
     "footer": {
       "secure_note": "Безопасно и конфиденциально"

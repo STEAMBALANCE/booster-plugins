@@ -16,6 +16,7 @@ import { buildOrdersUrl, buildSupportUrl } from './urls-helper';
 import { appendOrderUid, sanitizeStoredUids, isValidUid } from './order-uids';
 import { readSupportEnvInfo } from './env-info';
 import { wireOrdersEmbed } from './orders-embed';
+import { isDocKey, DOC_WINDOW_DIMS, docWindowContent, type DocKey } from './doc-windows';
 import { LL } from '../i18n';
 
 declare const __SB_POPUP_HTML__: string;
@@ -32,6 +33,8 @@ const WINDOW_SUPPORT = 'sb_support';
 const WINDOW_PAYMENT = 'sb_topup_payment';
 const WINDOW_ORDERS  = 'sb_orders';
 const WINDOW_FAQ     = 'sb_faq';
+const WINDOW_TERMS   = 'sb_terms';
+const WINDOW_PRIVACY = 'sb_privacy';
 
 const POPUP_W = 378;
 const POPUP_H = 248;
@@ -290,9 +293,35 @@ export async function installMain(ctx: PluginContext): Promise<() => void> {
   let ordersHandle: OpenWindowHandle | null = null;
   let ordersInFlight = false;
 
-  // FAQ modal state — same reuse + in-flight pattern as orders/support.
-  let faqHandle: OpenWindowHandle | null = null;
-  let faqInFlight = false;
+  // Документные модалки terms/privacy/faq. Reuse-by-id + in-flight guard —
+  // тот же паттерн, что у orders/support. Общий опенер вместо штучных хендлеров.
+  const DOC_WINDOW_IDS: Record<DocKey, string> = {
+    terms: WINDOW_TERMS, privacy: WINDOW_PRIVACY, faq: WINDOW_FAQ,
+  };
+  const docHandles: Partial<Record<DocKey, OpenWindowHandle>> = {};
+  const docInFlight: Partial<Record<DocKey, boolean>> = {};
+
+  async function openDocWindow(doc: DocKey): Promise<void> {
+    const existing = docHandles[doc];
+    if (existing) {
+      try { existing.bringToFront(); } catch {}
+      popup.hide();
+      return;
+    }
+    if (docInFlight[doc]) return;
+    docInFlight[doc] = true;
+    try {
+      const { url, title } = docWindowContent(doc);
+      const handle = await sb.ui.openWindow({ id: DOC_WINDOW_IDS[doc], url, title, ...DOC_WINDOW_DIMS });
+      docHandles[doc] = handle;
+      handle.on('close', () => { delete docHandles[doc]; });
+      popup.hide();
+    } catch (e) {
+      console.error(`[booster-checkout] openWindow ${doc} failed:`, e);
+    } finally {
+      docInFlight[doc] = false;
+    }
+  }
 
   // popup → main: user clicked "Pay" / "?" → navigate / open support modal.
   popup.on('message', async (data: unknown) => {
@@ -433,29 +462,10 @@ export async function installMain(ctx: PluginContext): Promise<() => void> {
       } finally {
         supportInFlight = false;
       }
-    } else if (d?.kind === 'faq') {
-      if (faqHandle) {
-        try { faqHandle.bringToFront(); } catch {}
-        popup.hide();
-        return;
-      }
-      if (faqInFlight) return;
-      faqInFlight = true;
-      try {
-        const handle = await sb.ui.openWindow({
-          id: WINDOW_FAQ,
-          url: URLS.faq,
-          title: LL.checkout.popup.faq_window_title(),
-          width: 720, height: 640, minWidth: 560, minHeight: 420,
-        });
-        faqHandle = handle;
-        handle.on('close', () => { faqHandle = null; });
-        popup.hide();
-      } catch (e) {
-        console.error('[booster-checkout] openWindow faq failed:', e);
-      } finally {
-        faqInFlight = false;
-      }
+    } else if (d?.kind === 'open-doc') {
+      const doc = (d as { doc?: unknown }).doc;
+      if (isDocKey(doc)) void openDocWindow(doc);
+      else console.warn('[booster-checkout] open-doc: unknown doc', doc);
     }
   });
 
@@ -485,6 +495,7 @@ export async function installMain(ctx: PluginContext): Promise<() => void> {
       // compatibility.
       urls: {
         support:        URLS.support,
+        telegram:       URLS.telegram,
         popupLogoLink:      URLS.popupLogoLink,
         balanceCalcApi: URLS.balanceCalcApi,
         balanceAddApi:  URLS.balanceAddApi,

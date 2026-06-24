@@ -1,10 +1,11 @@
 // booster-plugins/packages/booster-checkout/popup-svelte/__tests__/menu-dropdown.test.ts
 //
-// Visibility-matrix tests for MenuDropdown's three rows:
-// - Support row: gated by non-empty supportUrl (existing behavior).
-// - Orders row: always visible (no prop gate; tracked locally by uid).
-// - Settings row: gated by showSettings prop (default false; UI not
-//                  shipped this sprint, code preserved for later).
+// Visibility-matrix tests for MenuDropdown's six rows:
+// - Orders row: always first; no prop gate.
+// - Support row: gated by non-empty supportUrl.
+// - Telegram row: anchor element (target=_blank) when telegramUrl non-empty.
+// - Terms/Privacy/FAQ rows: always visible; fire doc handlers on click.
+// - Settings row: gated by showSettings prop (default false).
 //
 // Component-level rendering uses Svelte 5's `mount()` directly into a
 // happy-dom Window — same approach as popup-render-helper.ts but with
@@ -77,9 +78,14 @@ function restoreGlobals(saved: Map<string, unknown>): void {
 
 interface RenderProps {
   supportUrl?: string;
+  telegramUrl?: string;
   showSettings?: boolean;
   onSupport?: () => void;
   onOrders?: () => void;
+  onTelegram?: () => void;
+  onTerms?: () => void;
+  onPrivacy?: () => void;
+  onFaq?: () => void;
   onSettings?: () => void;
 }
 
@@ -91,9 +97,14 @@ function renderMenu(props: RenderProps = {}): { win: Window; doc: Document; clos
     target,
     props: {
       supportUrl: props.supportUrl ?? '',
+      telegramUrl: props.telegramUrl ?? 'https://steambalance.cc/c/0eb9',
       ...(props.showSettings !== undefined ? { showSettings: props.showSettings } : {}),
       onSupport: props.onSupport ?? (() => {}),
       onOrders: props.onOrders ?? (() => {}),
+      onTelegram: props.onTelegram ?? (() => {}),
+      onTerms: props.onTerms ?? (() => {}),
+      onPrivacy: props.onPrivacy ?? (() => {}),
+      onFaq: props.onFaq ?? (() => {}),
       onSettings: props.onSettings ?? (() => {}),
     },
   });
@@ -166,14 +177,38 @@ test('MenuDropdown — orders onclick fires the handler', () => {
   close();
 });
 
-test('MenuDropdown shows all three rows when support + settings are enabled', () => {
-  const { doc, close } = renderMenu({
-    supportUrl: 'https://example.com/jivo',
-    showSettings: true,
-  });
+test('MenuDropdown renders all six rows in the required order', () => {
+  const { doc, close } = renderMenu({ supportUrl: 'https://example.com/jivo' });
   const labels = textsOf(doc, '.menu .row .label');
-  expect(labels).toContain('ПОДДЕРЖКА');
-  expect(labels).toContain('МОИ ЗАКАЗЫ');
-  expect(labels).toContain('НАСТРОЙКИ');
+  expect(labels).toEqual([
+    'МОИ ЗАКАЗЫ', 'ПОДДЕРЖКА', 'ТЕЛЕГРАМ', 'СОГЛАШЕНИЕ', 'ПОЛИТИКА', 'FAQ',
+  ]);
+  close();
+});
+
+test('MenuDropdown telegram row is an external-browser anchor', () => {
+  const { doc, close } = renderMenu({ telegramUrl: 'https://steambalance.cc/c/0eb9' });
+  const a = doc.querySelector('a.row') as HTMLAnchorElement;
+  expect(a).toBeTruthy();
+  expect(a.getAttribute('href')).toBe('https://steambalance.cc/c/0eb9');
+  expect(a.getAttribute('target')).toBe('_blank');
+  const rel = a.getAttribute('rel') ?? '';
+  expect(rel).toContain('noopener');
+  expect(rel).toContain('noreferrer');
+  expect((a.textContent ?? '')).toContain('ТЕЛЕГРАМ');
+  close();
+});
+
+test('MenuDropdown doc rows fire their handlers', () => {
+  let terms = 0, privacy = 0, faq = 0;
+  const { doc, close } = renderMenu({
+    onTerms: () => { terms++; }, onPrivacy: () => { privacy++; }, onFaq: () => { faq++; },
+  });
+  const rows = Array.from(doc.querySelectorAll('.menu .row')) as HTMLElement[];
+  const find = (t: string) => rows.find(r => (r.textContent ?? '').includes(t)) as HTMLButtonElement;
+  find('СОГЛАШЕНИЕ').click();
+  find('ПОЛИТИКА').click();
+  find('FAQ').click();
+  expect([terms, privacy, faq]).toEqual([1, 1, 1]);
   close();
 });
