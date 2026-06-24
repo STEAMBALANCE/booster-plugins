@@ -82,6 +82,11 @@ export const ui = $state({
   },
   initSeen:      false,
   emailReceived: false,
+  // True once the main shell has delivered the install SetupId (x-booster-uuid)
+  // OR signalled it finished resolving (uuidResolved). The pay flow gates on
+  // this so /balance/add never POSTs without x-booster-uuid. Session-level —
+  // NOT reset by resetTransientUI (like initSeen/emailReceived).
+  uuidReceived:  false,
   pendingPay:    false,
 
   // Dynamic payment methods (replaces the legacy paymentIds map).

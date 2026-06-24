@@ -69,7 +69,7 @@ beforeEach(() => {
   ui.urls.balanceCalcApi = ''; ui.urls.balanceAddApi = '';
   ui.urls.telegram = '';
   ui.paymentMethods = []; ui.paymentMethodsLoading = false; ui.paymentMethodsError = null;
-  ui.initSeen = false; ui.emailReceived = false;
+  ui.initSeen = false; ui.emailReceived = false; ui.uuidReceived = false;
   ui.pendingPay = false;
   ui.calc = null; ui.calcLoading = false; ui.calcError = null;
   ui.paySubmitting = false;
@@ -247,6 +247,81 @@ test('init sets window.__SB_BOOSTER_UUID__ from uuid field', () => {
   }
 });
 
+test('init with a valid uuid sets ui.uuidReceived', () => {
+  expect(ui.uuidReceived).toBe(false);
+  postFromOutside({ kind: 'init', login: 'u', uuid: 'real-uuid' });
+  expect(ui.uuidReceived).toBe(true);
+});
+
+test('empty / CRLF uuid does NOT set ui.uuidReceived', () => {
+  postFromOutside({ kind: 'init', login: 'u', uuid: '' });
+  expect(ui.uuidReceived).toBe(false);
+  postFromOutside({ kind: 'init', login: 'u', uuid: 'bad\r\nuuid' });
+  expect(ui.uuidReceived).toBe(false);
+});
+
+test('uuidResolved=true releases the gate even without a uuid value', () => {
+  postFromOutside({ kind: 'init', login: 'u', uuid: '' });
+  expect(ui.uuidReceived).toBe(false);
+  postFromOutside({ kind: 'init', login: 'u', uuidResolved: true });
+  expect(ui.uuidReceived).toBe(true);
+});
+
+test('pay GATE: payAndNavigate defers and /balance/add never fires without uuid', async () => {
+  let addCalls = 0;
+  globalThis.fetch = (async (url: RequestInfo | URL) => {
+    if (String(url).includes('/api/balance/add')) { addCalls++; return new Response(JSON.stringify({ data: { redirectUrl: 'https://x' } })); }
+    return new Response('null');
+  }) as typeof fetch;
+  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' } });
+  postFromOutside({ kind: 'email', email: '' });
+  ui.amount = 100;
+  expect(ui.initSeen).toBe(true);
+  expect(ui.emailReceived).toBe(true);
+  expect(ui.uuidReceived).toBe(false);
+  await payAndNavigate();
+  expect(ui.pendingPay).toBe(true);            // deferred — gated on uuid
+  await new Promise((r) => setTimeout(r, 10));
+  expect(addCalls).toBe(0);                     // /balance/add NEVER fired uuid-less
+});
+
+test('pay GATE: a queued pay drains once uuid arrives via a later init', async () => {
+  let addCalls = 0;
+  globalThis.fetch = (async (url: RequestInfo | URL) => {
+    if (String(url).includes('/api/balance/add')) { addCalls++; return new Response(JSON.stringify({ data: { redirectUrl: 'https://x' } })); }
+    return new Response('null');
+  }) as typeof fetch;
+  ui.amount = 100;
+  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' } });
+  postFromOutside({ kind: 'email', email: '' });
+  await payAndNavigate();
+  expect(ui.pendingPay).toBe(true);            // gated on uuid
+  expect(addCalls).toBe(0);
+  // uuid lands on a re-pushed init → gate releases, queued pay drains.
+  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' }, uuid: 'late-uuid' });
+  expect(ui.pendingPay).toBe(false);
+  await new Promise((r) => setTimeout(r, 30));
+  expect(addCalls).toBe(1);
+});
+
+test('pay GATE: uuidResolved give-up releases a queued pay (never blocks payment)', async () => {
+  let addCalls = 0;
+  globalThis.fetch = (async (url: RequestInfo | URL) => {
+    if (String(url).includes('/api/balance/add')) { addCalls++; return new Response(JSON.stringify({ data: { redirectUrl: 'https://x' } })); }
+    return new Response('null');
+  }) as typeof fetch;
+  ui.amount = 100;
+  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' } });
+  postFromOutside({ kind: 'email', email: '' });
+  await payAndNavigate();
+  expect(ui.pendingPay).toBe(true);
+  // Main shell gave up resolving the SetupId → release the gate so the user can pay.
+  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' }, uuidResolved: true });
+  expect(ui.pendingPay).toBe(false);
+  await new Promise((r) => setTimeout(r, 30));
+  expect(addCalls).toBe(1);
+});
+
 test('init forwards stack versions into window.__SB_BOOSTER_VERSIONS__', () => {
   // Versions arrive at runtime (NOT baked into the popup bundle) so the
   // popup booster headers stay version-independent — see headers.ts.
@@ -330,6 +405,7 @@ test('pendingPay drain triggers payAndNavigate (fires fetch + posts navigate) wh
     kind: 'init', login: 'testuser',
     currency: 'RUB', balance: 1000,
     urls: { support: '', popupLogoLink: '', balanceCalcApi: 'https://h.local/api/balance/calc', balanceAddApi: 'https://h.local/api/balance/add' },
+    uuid: 'test-uuid',
   });
   expect(ui.pendingPay).toBe(true);  // still pending — email not yet
 
@@ -375,7 +451,7 @@ test('email leak guard: prior test email does not appear in subsequent submitPay
 
   ui.amount = 100; ui.urls.balanceAddApi = 'https://h.local/api/balance/add'; ui.userLogin = 'u';
   ui.methodId = 'paypalych-sbp';
-  ui.initSeen = true; ui.emailReceived = true;
+  ui.initSeen = true; ui.emailReceived = true; ui.uuidReceived = true;
   await payAndNavigate();
   const body = JSON.parse(capturedBody);
   expect(body).not.toHaveProperty('email');
@@ -392,10 +468,12 @@ test('shown message resets transient UI state but preserves session state', () =
     currency: 'KZT',
     balance: 2000,
     urls: { support: 'https://j.chat/x', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' },
+    uuid: 'sess-uuid',
   });
   postFromOutside({ kind: 'email', email: 'matrix@example.com' });
   expect(ui.initSeen).toBe(true);
   expect(ui.emailReceived).toBe(true);
+  expect(ui.uuidReceived).toBe(true);
 
   // Simulate user activity: typed amount, opened dropdown, got calc back.
   ui.amount = 500;
@@ -437,6 +515,9 @@ test('shown message resets transient UI state but preserves session state', () =
   expect(ui.methodId).toBe('paypalych-card');  // user's last choice persisted
   expect(ui.initSeen).toBe(true);
   expect(ui.emailReceived).toBe(true);
+  // uuidReceived is session-level — resetTransientUI must NOT clear it, else
+  // the pay gate would re-block on every popup re-open.
+  expect(ui.uuidReceived).toBe(true);
 });
 
 test('hidden message resets transient UI state but preserves session state', () => {
@@ -451,6 +532,7 @@ test('hidden message resets transient UI state but preserves session state', () 
     currency: 'KZT',
     balance: 2000,
     urls: { support: 'https://j.chat/x', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' },
+    uuid: 'sess-uuid',
   });
   postFromOutside({ kind: 'email', email: 'matrix@example.com' });
 
@@ -488,6 +570,7 @@ test('hidden message resets transient UI state but preserves session state', () 
   expect(ui.methodId).toBe('paypalych-card');
   expect(ui.initSeen).toBe(true);
   expect(ui.emailReceived).toBe(true);
+  expect(ui.uuidReceived).toBe(true);   // session-level — survives the reset
 });
 
 test('hidden envelope: also clears lastEdited and desiredBalance', () => {
@@ -726,6 +809,7 @@ test('payAndNavigate posts navigate envelope carrying uid when submitPay returns
     kind: 'init', login: 'u',
     currency: 'RUB', balance: 1000,
     urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' },
+    uuid: 'test-uuid',
   });
   postFromOutside({ kind: 'email', email: '' });
   ui.amount = 100;

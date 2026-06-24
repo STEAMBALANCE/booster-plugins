@@ -181,8 +181,17 @@ function handleIncoming(d: Record<string, unknown>): void {
     // (same trust boundary as versions). Inline predicate mirrors the
     // `ok` guard inside the versions block above (ok is block-local).
     const rawUuid = (d as { uuid?: unknown }).uuid;
-    if (typeof rawUuid === 'string' && rawUuid.length > 0 && !/[\r\n]/.test(rawUuid) && typeof window !== 'undefined') {
-      (window as { __SB_BOOSTER_UUID__?: string }).__SB_BOOSTER_UUID__ = rawUuid;
+    if (typeof rawUuid === 'string' && rawUuid.length > 0 && !/[\r\n]/.test(rawUuid)) {
+      if (typeof window !== 'undefined') (window as { __SB_BOOSTER_UUID__?: string }).__SB_BOOSTER_UUID__ = rawUuid;
+      // Flag arrival so the pay flow can gate /balance/add on x-booster-uuid
+      // (set on `ui` regardless of `window` so bun-test contexts track it too).
+      ui.uuidReceived = true;
+    }
+    // Give-up signal: the main shell finished resolving the SetupId, possibly
+    // without a value (a broken install). Release the pay gate so a missing
+    // uuid never blocks payment — uuid stays empty only in that rare case.
+    if ((d as { uuidResolved?: unknown }).uuidResolved === true) {
+      ui.uuidReceived = true;
     }
     // initSeen — "init message arrived AND key pay-flow fields are set".
     // ui.urls.balanceAddApi is the URL submitPay hits; without it the
@@ -284,8 +293,9 @@ function handleIncoming(d: Record<string, unknown>): void {
     });
   }
 
-  // Drain pendingPay if init+email both arrived.
-  if (ui.pendingPay && ui.initSeen && ui.emailReceived) {
+  // Drain pendingPay once init + email + uuid have all arrived. uuid is part
+  // of the gate so a queued pay never POSTs /balance/add without x-booster-uuid.
+  if (ui.pendingPay && ui.initSeen && ui.emailReceived && ui.uuidReceived) {
     ui.pendingPay = false;
     void payAndNavigate();
   }
@@ -333,7 +343,10 @@ export function _resetForTest(): void {
 }
 
 export async function payAndNavigate(): Promise<void> {
-  if (!ui.initSeen || !ui.emailReceived) {
+  // Gate: never POST /balance/add until init + email + uuid are all ready, so
+  // x-booster-uuid is always present (and non-empty). When not ready, queue —
+  // the handleIncoming drain resumes the pay once the last piece arrives.
+  if (!ui.initSeen || !ui.emailReceived || !ui.uuidReceived) {
     ui.pendingPay = true;
     return;
   }

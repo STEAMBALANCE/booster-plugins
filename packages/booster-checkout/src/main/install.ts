@@ -479,6 +479,10 @@ export async function installMain(ctx: PluginContext): Promise<() => void> {
   // sendInitEmail — separate kind:'email' message. Popup marks emailReceived
   //                 (regardless of value — empty string means "Steam returned
   //                 no email", popup omits the email field in submit body).
+  // Flipped true once the SetupId resolver below finishes (success or give-up);
+  // forwarded to the popup so its pay gate releases. Declared before
+  // sendInitCore so the closure reads the live value on every re-push.
+  let uuidResolved = false;
   function sendInitCore(): void {
     const user = sb.steam.getCurrentUser();
     popup.postMessage({
@@ -509,6 +513,10 @@ export async function installMain(ctx: PluginContext): Promise<() => void> {
       uuid: (typeof window !== 'undefined'
         && typeof (window as { __SB_BOOSTER_UUID__?: unknown }).__SB_BOOSTER_UUID__ === 'string')
         ? (window as { __SB_BOOSTER_UUID__: string }).__SB_BOOSTER_UUID__ : undefined,
+      // Tells the popup the SetupId resolution is finished (see the resolver
+      // below) so its pay gate releases even if no uuid was obtainable — a
+      // missing SetupId must never block payment.
+      uuidResolved,
     });
   }
 
@@ -530,6 +538,37 @@ export async function installMain(ctx: PluginContext): Promise<() => void> {
   // time addfunds subscribes. Cold-cold (no user yet) is a no-op; the
   // onUserChange below publishes when the first snapshot lands.
   publishUserSnapshot();
+
+  // Reliable x-booster-uuid: resolve the install SetupId ourselves (the
+  // framework prefetch is best-effort and can lag the popup's first init),
+  // write the window global (backstop for the main-shell /api/payments
+  // headers), and re-push init so the popup picks it up and releases its pay
+  // gate. Bounded retry — the SetupId can lag on cold start (registry read /
+  // first-launch write race); on give-up we still re-push (uuidResolved) so a
+  // missing SetupId never blocks payment.
+  let uuidResolverStopped = false;
+  cleanups.push(() => { uuidResolverStopped = true; });
+  void (async () => {
+    const MAX_ATTEMPTS = 20;
+    for (let i = 0; i < MAX_ATTEMPTS && !uuidResolverStopped; i++) {
+      let id: string | undefined;
+      try { id = await sb.app.getSetupId(); } catch { id = undefined; }
+      if (uuidResolverStopped) return;
+      if (id && !/[\r\n]/.test(id)) {
+        if (typeof window !== 'undefined') {
+          (window as { __SB_BOOSTER_UUID__?: string }).__SB_BOOSTER_UUID__ = id;
+        }
+        uuidResolved = true;
+        sendInitCore();   // re-push so the popup gets the uuid + releases its gate
+        return;
+      }
+      await new Promise<void>((r) => setTimeout(r, Math.min(2000, 250 * (i + 1))));
+    }
+    if (uuidResolverStopped) return;
+    uuidResolved = true;   // give up — never block payment on a missing SetupId
+    ctx.log.warn('setupId unavailable after retries — x-booster-uuid will be empty');
+    sendInitCore();
+  })();
 
   // onUserChange creates a fresh SteamUser instance per snapshot, so each
   // callback re-fires sendInitEmail's BC roundtrip. Relay-side cache
