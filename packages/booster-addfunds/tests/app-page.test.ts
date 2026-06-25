@@ -51,11 +51,13 @@ const item = (over: Partial<KeyItem> = {}): KeyItem => ({
 
 interface PurchaseResult { status: 'ok' | 'email-required' | 'error'; error?: string }
 
+interface WindowTitles { title: string; taskbarTitle: string }
+
 interface TestKeysClient {
   requestKeys: (appid: number, signal: AbortSignal) => Promise<KeyItem[]>;
-  purchaseKey: (itemId: number, email?: string) => Promise<PurchaseResult>;
+  purchaseKey: (itemId: number, email?: string, titles?: WindowTitles) => Promise<PurchaseResult>;
   dispose(): void;
-  purchases: Array<{ itemId: number; email?: string }>;
+  purchases: Array<{ itemId: number; email?: string; titles?: WindowTitles }>;
 }
 
 function makeKeysClient(opts: {
@@ -63,13 +65,13 @@ function makeKeysClient(opts: {
   requestKeys?: (appid: number, signal: AbortSignal) => Promise<KeyItem[]>;
   purchaseSeq?: PurchaseResult[];
 } = {}): TestKeysClient {
-  const purchases: Array<{ itemId: number; email?: string }> = [];
+  const purchases: Array<{ itemId: number; email?: string; titles?: WindowTitles }> = [];
   let n = 0;
   return {
     purchases,
     requestKeys: opts.requestKeys ?? (async () => opts.items ?? []),
-    purchaseKey: async (itemId: number, email?: string): Promise<PurchaseResult> => {
-      purchases.push({ itemId, email });
+    purchaseKey: async (itemId: number, email?: string, titles?: WindowTitles): Promise<PurchaseResult> => {
+      purchases.push({ itemId, email, titles });
       const seq = opts.purchaseSeq;
       const r = seq ? (seq[Math.min(n, seq.length - 1)] ?? { status: 'ok' }) : { status: 'ok' };
       n++;
@@ -266,6 +268,21 @@ describe('registerAppPage', () => {
     expect(keysClient.purchases[0]!.itemId).toBe(101);
   });
 
+  test('buy → purchaseKey carries game-scoped window titles (game name in heading, not in taskbar)', async () => {
+    const { sb, pageReg } = makeSbStub();
+    const keysClient = makeKeysClient({ items: [item({ itemId: 101, name: 'Half-Life', packageId: 13533 })] });
+    registerAppPage(sb, { keysClient });
+    setBody(oneBlockBody);
+    await reg(pageReg).mount(mountCtx());
+    await tick();
+    (document.querySelector('.booster-eo-buy') as HTMLButtonElement).click();
+    await tick();
+    const titles = keysClient.purchases[0]!.titles!;
+    expect(titles).toBeDefined();
+    expect(titles.title).toContain('Half-Life');     // window heading is game-scoped
+    expect(titles.taskbarTitle).not.toContain('Half-Life'); // taskbar caption stays generic
+  });
+
   test('normal page, keys present but none match a subid → topup + a «СКОРО» chip', async () => {
     const { sb, pageReg } = makeSbStub();
     // item packageId 99999 matches no block on the page → empty branch.
@@ -297,7 +314,10 @@ describe('registerAppPage', () => {
     expect(modalCalls).toBe(1);
     expect(keysClient.purchases.length).toBe(2);
     expect(keysClient.purchases[0]!.email).toBeUndefined();
-    expect(keysClient.purchases[1]!).toEqual({ itemId: 101, email: 'buyer@mail.com' });
+    expect(keysClient.purchases[1]!).toMatchObject({ itemId: 101, email: 'buyer@mail.com' });
+    // Both attempts (pre- and post-email) carry the same window titles.
+    expect(keysClient.purchases[0]!.titles).toBeDefined();
+    expect(keysClient.purchases[1]!.titles).toEqual(keysClient.purchases[0]!.titles);
   });
 
   test('purchase needs email but user cancels → no 2nd purchaseKey', async () => {

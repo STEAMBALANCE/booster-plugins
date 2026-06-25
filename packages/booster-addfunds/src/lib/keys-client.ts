@@ -58,13 +58,24 @@ export function createKeysClient(sb: SbApi, opts: { timeoutMs?: number; retryMs?
     });
   }
 
-  function purchaseKey(itemId: number, email?: string): Promise<{ status: 'ok' | 'email-required' | 'error'; error?: string }> {
+  // `titles` carry the payment-window heading (React TitleBar) + taskbar caption.
+  // checkout opens the window but only addfunds knows the game name, so both
+  // strings ride the bus to the main-shell opener.
+  function purchaseKey(
+    itemId: number,
+    email?: string,
+    titles?: { title: string; taskbarTitle: string },
+  ): Promise<{ status: 'ok' | 'email-required' | 'error'; error?: string }> {
     const reqId = nextId();
     return new Promise((resolve) => {
       let done = false;
       const finish = (r: { status: 'ok' | 'email-required' | 'error'; error?: string }): void => { if (done) return; done = true; clearTimeout(to); purchaseWaiters.delete(reqId); resolve(r); };
       purchaseWaiters.set(reqId, finish);
-      sb.bus.publish('booster-addfunds.keys.purchase', { reqId, itemId, ...(email ? { email } : {}) });
+      sb.bus.publish('booster-addfunds.keys.purchase', {
+        reqId, itemId,
+        ...(email ? { email } : {}),
+        ...(titles ? { windowTitle: titles.title, windowTaskbarTitle: titles.taskbarTitle } : {}),
+      });
       const to = setTimeout(() => finish({ status: 'error', error: 'timeout' }), purchaseTimeoutMs);
     });
   }

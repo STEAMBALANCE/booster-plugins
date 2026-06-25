@@ -50,6 +50,31 @@ test('purchaseKey → email-required then ok', async () => {
   client.dispose();
 });
 
+test('purchaseKey forwards window titles on the bus payload', async () => {
+  const bus = makeBus(); const sb = { bus } as any;
+  const client = createKeysClient(sb, { timeoutMs: 500, retryMs: 100 });
+  const titles = { title: 'Покупка ключа — «Game X»', taskbarTitle: 'Покупка ключа' };
+  const p = client.purchaseKey(7, 'a@b.c', titles);
+  await new Promise((r) => setTimeout(r, 5));
+  const req = bus.published.find((x) => x.topic === 'booster-addfunds.keys.purchase')!;
+  expect(req.data.windowTitle).toBe(titles.title);
+  expect(req.data.windowTaskbarTitle).toBe(titles.taskbarTitle);
+  bus.emit('booster-checkout.keys.purchase-result', { reqId: req.data.reqId, ok: true });
+  expect(await p).toEqual({ status: 'ok' });
+  client.dispose();
+});
+
+test('purchaseKey without titles omits the window-title fields', async () => {
+  const bus = makeBus(); const sb = { bus } as any;
+  const client = createKeysClient(sb, { timeoutMs: 500, retryMs: 100 });
+  client.purchaseKey(7);
+  await new Promise((r) => setTimeout(r, 5));
+  const req = bus.published.find((x) => x.topic === 'booster-addfunds.keys.purchase')!;
+  expect('windowTitle' in req.data).toBe(false);
+  expect('windowTaskbarTitle' in req.data).toBe(false);
+  client.dispose();
+});
+
 test('requestKeys: aborting the signal resolves []', async () => {
   const bus = makeBus(); const sb = { bus } as any;
   const client = createKeysClient(sb, { timeoutMs: 5000, retryMs: 1000 });

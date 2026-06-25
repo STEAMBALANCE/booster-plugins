@@ -60,7 +60,7 @@ interface PurchaseHandle {
 
 interface KeysClient {
   requestKeys(appid: number, signal: AbortSignal): Promise<KeyItem[]>;
-  purchaseKey(itemId: number, email?: string): Promise<{ status: 'ok' | 'email-required' | 'error'; error?: string }>;
+  purchaseKey(itemId: number, email?: string, titles?: { title: string; taskbarTitle: string }): Promise<{ status: 'ok' | 'email-required' | 'error'; error?: string }>;
   dispose(): void;
 }
 
@@ -83,13 +83,20 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
   async function runPurchase(item: KeyItem, handle: PurchaseHandle): Promise<void> {
     handle.setError(null);
     handle.setBusy(true);
-    let r = await keysClient.purchaseKey(item.itemId);
+    // Payment-window titles: generic taskbar caption (no game name leaks into the
+    // Windows taskbar), game-scoped heading inside the window. Opened by checkout's
+    // main-shell, which has no game name — so both ride the bus with the purchase.
+    const titles = {
+      title: LL.addfunds.keys_purchase_window_title({ gameName: item.name }),
+      taskbarTitle: LL.addfunds.keys_purchase_window_taskbar_title(),
+    };
+    let r = await keysClient.purchaseKey(item.itemId, undefined, titles);
     if (r.status === 'email-required') {
       handle.setBusy(false);
       const email = await openEmailModal();
       if (!email) return;            // cancel → nothing sent, loader already off
       handle.setBusy(true);
-      r = await keysClient.purchaseKey(item.itemId, email);
+      r = await keysClient.purchaseKey(item.itemId, email, titles);
     }
     handle.setBusy(false);
     if (r.status === 'error') handle.setError(LL.addfunds.keys_purchase_error());

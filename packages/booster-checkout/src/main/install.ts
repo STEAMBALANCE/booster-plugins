@@ -18,7 +18,7 @@ import { readSupportEnvInfo } from './env-info';
 import { wireOrdersEmbed } from './orders-embed';
 import { isDocKey, DOC_WINDOW_DIMS, docWindowContent, type DocKey } from './doc-windows';
 import { LL } from '../i18n';
-import { installKeysBridge } from './keys-install';
+import { installKeysBridge, type KeysWindowTitles } from './keys-install';
 
 declare const __SB_POPUP_HTML__: string;
 // Inline SVG (15×12 "S6" mark) for the Steam-toolbar header pill. Wide
@@ -249,19 +249,25 @@ export async function installMain(ctx: PluginContext): Promise<() => void> {
   // installKeysBridge only calls openKeysPayment asynchronously (event-driven).
   let keysPaymentHandle: OpenExternalWindowHandle | null = null;
   let keysPaymentInFlight = false;
-  async function openKeysPayment(url: string): Promise<boolean> {
+  // Titles are authored by addfunds (only it knows the game name) and ride the
+  // bus — see keys-install.ts. taskbarTitle stays generic ("Покупка ключа"), the
+  // in-window heading is game-scoped ("Покупка ключа — «{game}»"). Both already
+  // sanitized (1..200) bridge-side; omitted keys fall back to the page's own title.
+  async function openKeysPayment(url: string, titles?: KeysWindowTitles): Promise<boolean> {
     if (keysPaymentHandle) {
+      // Reuse: only the URL swaps — the handle has no setTitle, so a second
+      // purchase (different game) while the window is still open keeps the first
+      // game's heading. taskbarTitle stays generic regardless, so no name leaks.
       try { keysPaymentHandle.setUrl(url); return true; } catch (e) { console.error('[booster-checkout] keys setUrl failed:', e); return false; }
     }
     if (keysPaymentInFlight) return false;
     keysPaymentInFlight = true;
     try {
-      const login = sb.steam.getCurrentUser()?.accountName;
       const handle = await sb.ui.openExternalWindow({
         id: WINDOW_KEYS_PAYMENT,
         url,
-        title: login ? LL.checkout.popup.window_title({ login }) : LL.checkout.popup.window_title_no_login(),
-        taskbarTitle: LL.checkout.popup.window_title_no_login(),
+        ...(titles?.title ? { title: titles.title } : {}),
+        ...(titles?.taskbarTitle ? { taskbarTitle: titles.taskbarTitle } : {}),
       });
       keysPaymentHandle = handle;
       handle.on('close', () => { keysPaymentHandle = null; });

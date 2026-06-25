@@ -3,9 +3,28 @@ import { resolveKeysPaymentId } from './keys-payment';
 import { fetchKeys } from './keys-fetch';
 import { postKeysOrder } from './keys-order';
 
+export interface KeysWindowTitles {
+  /** React TitleBar heading inside the payment window. */
+  title?: string;
+  /** Windows native taskbar caption. */
+  taskbarTitle?: string;
+}
+
 export interface KeysBridgeDeps {
-  openPayment: (url: string) => Promise<boolean>;
+  openPayment: (url: string, titles?: KeysWindowTitles) => Promise<boolean>;
   fetchImpl?: typeof fetch;
+}
+
+// Mirror of the framework's private TITLE_MIN/TITLE_MAX in external-window.ts
+// (not exported, so kept in sync by hand). openExternalWindow rejects titles
+// outside this range with a SYNC throw — which would fire AFTER the order is
+// already placed, surfacing a false error / risking a double order. Drop any
+// forged / out-of-range value to undefined so the window still opens (it just
+// falls back to the page's own title).
+const TITLE_MIN = 1;
+const TITLE_MAX = 200;
+function sanitizeTitle(x: unknown): string | undefined {
+  return typeof x === 'string' && x.length >= TITLE_MIN && x.length <= TITLE_MAX ? x : undefined;
 }
 
 async function resolveSteamEmail(sb: SbApi): Promise<string | undefined> {
@@ -38,16 +57,20 @@ export function installKeysBridge(sb: SbApi, deps: KeysBridgeDeps): () => void {
 
   subs.push(sb.bus.subscribe('booster-addfunds.keys.purchase', (data) => {
     void (async () => {
-      const d = data as { reqId?: unknown; itemId?: unknown; email?: unknown } | null;
+      const d = data as { reqId?: unknown; itemId?: unknown; email?: unknown; windowTitle?: unknown; windowTaskbarTitle?: unknown } | null;
       if (!d || typeof d.reqId !== 'string' || typeof d.itemId !== 'number') return;
       const reqId = d.reqId; const itemId = d.itemId;
+      const titles: KeysWindowTitles = {
+        title: sanitizeTitle(d.windowTitle),
+        taskbarTitle: sanitizeTitle(d.windowTaskbarTitle),
+      };
       const account = (typeof d.email === 'string' && d.email) ? d.email : await resolveSteamEmail(sb);
       if (!account) { sb.bus.publish('booster-checkout.keys.email-required', { reqId }); return; }
       const paymentId = await resolveKeysPaymentId(sb, fetchImpl);
       if (!paymentId) { sb.bus.publish('booster-checkout.keys.purchase-result', { reqId, ok: false, error: 'no-payment' }); return; }
       const res = await postKeysOrder(sb, { paymentId, itemId, account }, fetchImpl);
       if (!res.ok || !res.redirectUrl) { sb.bus.publish('booster-checkout.keys.purchase-result', { reqId, ok: false, error: res.error }); return; }
-      const opened = await deps.openPayment(res.redirectUrl);
+      const opened = await deps.openPayment(res.redirectUrl, titles);
       sb.bus.publish('booster-checkout.keys.purchase-result', { reqId, ok: opened, error: opened ? undefined : 'window' });
     })();
   }));

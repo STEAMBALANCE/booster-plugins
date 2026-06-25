@@ -19,6 +19,8 @@ const ru = {
     keys_email_modal_title: 'Куда отправить ключ?',
     keys_item_coming_soon: 'Скоро в продаже',
     keys_purchase_error: 'Не удалось оформить заказ. Попробуйте ещё раз.',
+    keys_purchase_window_taskbar_title: 'Покупка ключа',
+    keys_purchase_window_title: 'Покупка ключа — «{gameName:string}»',
     keys_row_label: 'Купить {gameName:string}',
     row_aria_label: 'Пополнить баланс через SteamBalance',
     row_label: 'Пополнение баланса',

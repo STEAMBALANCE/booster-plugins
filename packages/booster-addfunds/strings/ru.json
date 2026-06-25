@@ -12,6 +12,8 @@
     "edition_offer_soon_badge": "СКОРО",
     "keys_item_coming_soon":      "Скоро в продаже",
     "keys_purchase_error":        "Не удалось оформить заказ. Попробуйте ещё раз.",
+    "keys_purchase_window_taskbar_title": "Покупка ключа",
+    "keys_purchase_window_title":         "Покупка ключа — «{gameName:string}»",
     "keys_email_modal_title":     "Куда отправить ключ?",
     "keys_email_modal_hint":      "Укажите email — на него придёт ключ после оплаты.",
     "keys_email_modal_placeholder":"you@example.com",

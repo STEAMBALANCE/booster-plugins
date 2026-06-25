@@ -21,3 +21,8 @@ test('new addfunds strings resolve', () => {
   expect(LL.addfunds.keys_block_aria_label()).toBe('Доступные ключи для покупки в вашем регионе');
   expect(LL.addfunds.edition_offer_aria_label()).toBe('Предложение SteamBalance — купить дешевле');
 });
+
+test('key-purchase window titles resolve', () => {
+  expect(LL.addfunds.keys_purchase_window_taskbar_title()).toBe('Покупка ключа');
+  expect(LL.addfunds.keys_purchase_window_title({ gameName: 'Game X' })).toBe('Покупка ключа — «Game X»');
+});

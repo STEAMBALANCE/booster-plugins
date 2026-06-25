@@ -66,6 +66,34 @@ describe('installKeysBridge', () => {
     expect((res!.data as any)).toMatchObject({ reqId: 'p1', ok: true });
   });
 
+  test('purchase forwards sanitized window titles to openPayment', async () => {
+    const bus = makeBus();
+    const payments = { success: true, data: [{ value: 'p', can_pay_services: true, disabled: false }] };
+    const order = { success: true, data: { redirectUrl: 'https://pay/x', uid: 'u' } };
+    let call = 0;
+    const fetchImpl = (async () => ({ ok: true, status: 200, json: async () => (call++ === 0 ? payments : order) })) as any;
+    let gotTitles: any;
+    installKeysBridge(makeSb(bus, { email: 'a@b.c' }), { openPayment: async (_u, t) => { gotTitles = t; return true; }, fetchImpl });
+    bus.publish('booster-addfunds.keys.purchase', { reqId: 'p1', itemId: 7, windowTitle: 'Покупка ключа — «Game X»', windowTaskbarTitle: 'Покупка ключа' });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(gotTitles).toEqual({ title: 'Покупка ключа — «Game X»', taskbarTitle: 'Покупка ключа' });
+  });
+
+  test('purchase drops forged out-of-range / non-string titles to undefined', async () => {
+    const bus = makeBus();
+    const payments = { success: true, data: [{ value: 'p', can_pay_services: true, disabled: false }] };
+    const order = { success: true, data: { redirectUrl: 'https://pay/x', uid: 'u' } };
+    let call = 0;
+    const fetchImpl = (async () => ({ ok: true, status: 200, json: async () => (call++ === 0 ? payments : order) })) as any;
+    let gotTitles: any;
+    installKeysBridge(makeSb(bus, { email: 'a@b.c' }), { openPayment: async (_u, t) => { gotTitles = t; return true; }, fetchImpl });
+    bus.publish('booster-addfunds.keys.purchase', { reqId: 'p1', itemId: 7, windowTitle: 'x'.repeat(201), windowTaskbarTitle: 42 });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(gotTitles).toBeDefined();
+    expect(gotTitles.title).toBeUndefined();
+    expect(gotTitles.taskbarTitle).toBeUndefined();
+  });
+
   test('purchase without email → email-required', async () => {
     const bus = makeBus();
     installKeysBridge(makeSb(bus, { email: undefined }), { openPayment: async () => true, fetchImpl: okFetch({}) });
