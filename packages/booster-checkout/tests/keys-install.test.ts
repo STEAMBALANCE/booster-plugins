@@ -66,6 +66,20 @@ describe('installKeysBridge', () => {
     expect((res!.data as any)).toMatchObject({ reqId: 'p1', ok: true });
   });
 
+  test('order failure forwards the server human message in purchase-result', async () => {
+    const bus = makeBus();
+    const payments = { success: true, data: [{ value: 'p', can_pay_services: true, disabled: false }] };
+    const order = { success: false, message: 'Платёжный метод недоступен' };
+    let call = 0;
+    const fetchImpl = (async () => ({ ok: true, status: 200, json: async () => (call++ === 0 ? payments : order) })) as any;
+    installKeysBridge(makeSb(bus, { email: 'a@b.c' }), { openPayment: async () => true, fetchImpl });
+    bus.publish('booster-addfunds.keys.purchase', { reqId: 'p1', itemId: 7 });
+    await new Promise((r) => setTimeout(r, 5));
+    const res = bus.published.find((p) => p.topic === 'booster-checkout.keys.purchase-result');
+    expect((res!.data as any).ok).toBe(false);
+    expect((res!.data as any).message).toBe('Платёжный метод недоступен');
+  });
+
   test('purchase forwards sanitized window titles to openPayment', async () => {
     const bus = makeBus();
     const payments = { success: true, data: [{ value: 'p', can_pay_services: true, disabled: false }] };

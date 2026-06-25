@@ -47,17 +47,11 @@ test('root uses class booster-eo (not the old singleton id), keeps data-sb', () 
   expect(root.getAttribute('data-sb')).toBe('1');
 });
 
-test('setBusy disables the buy button; setError toggles the error span', () => {
-  const { root, setBusy, setError } = buildEditionOfferChip({ item: base, onBuy: () => {} });
+test('setBusy disables the buy button', () => {
+  const { root, setBusy } = buildEditionOfferChip({ item: base, onBuy: () => {} });
   const buy = root.querySelector('.booster-eo-buy') as HTMLButtonElement;
   setBusy(true);
   expect(buy.disabled).toBe(true);
   setBusy(false);
   expect(buy.disabled).toBe(false);
-  setError('boom');
-  const err = root.querySelector('.booster-eo-error') as HTMLElement;
-  expect(err.textContent).toBe('boom');
-  expect(err.hidden).toBe(false);
-  setError(null);
-  expect(err.hidden).toBe(true);
 });

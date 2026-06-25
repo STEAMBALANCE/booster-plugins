@@ -35,7 +35,6 @@ export interface EditionChipOptions {
 export interface EditionChip {
   root: HTMLElement;
   setBusy(b: boolean): void;
-  setError(m: string | null): void;
 }
 
 export function buildEditionOfferChip(opts: EditionChipOptions): EditionChip {
@@ -105,23 +104,12 @@ export function buildEditionOfferChip(opts: EditionChipOptions): EditionChip {
     root.appendChild(buy);
   }
 
-  // Error span — shown by setError, hidden otherwise. Always present (active +
-  // comingSoon) so runPurchase can surface a message; harmless on inactive too.
-  const error = document.createElement('span');
-  error.className = 'booster-eo-error';
-  error.hidden = true;
-  root.appendChild(error);
-
   return {
     root,
     setBusy(b: boolean): void {
       if (!buy) return;
       buy.disabled = b;
       buy.classList.toggle('booster-eo-buy--busy', b);
-    },
-    setError(m: string | null): void {
-      if (m) { error.textContent = m; error.hidden = false; }
-      else { error.textContent = ''; error.hidden = true; }
     },
   };
 }

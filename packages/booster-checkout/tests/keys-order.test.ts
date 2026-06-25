@@ -16,9 +16,18 @@ describe('postKeysOrder', () => {
     const r = await postKeysOrder(sb, { paymentId: 'p', itemId: 5, account: 'a@b.c' }, fakeFetch({ redirectUrl: 'https://x/y' }));
     expect(r.ok).toBe(true); expect(r.redirectUrl).toBe('https://x/y');
   });
-  test('success=false → error', async () => {
+  test('success=false → human message in `message`, machine code in `error`', async () => {
     const r = await postKeysOrder(sb, { paymentId: 'p', itemId: 5, account: 'a@b.c' }, fakeFetch({ success: false, message: 'nope' }));
-    expect(r.ok).toBe(false); expect(r.error).toBe('nope');
+    expect(r.ok).toBe(false);
+    expect(r.message).toBe('nope');          // server-supplied human text → user-facing
+    expect(typeof r.error).toBe('string');   // machine code for logs
+    expect(r.error).not.toBe('nope');        // never the human text
+  });
+  test('success=false without a message → no human message, only a machine code', async () => {
+    const r = await postKeysOrder(sb, { paymentId: 'p', itemId: 5, account: 'a@b.c' }, fakeFetch({ success: false }));
+    expect(r.ok).toBe(false);
+    expect(r.message).toBeUndefined();
+    expect(typeof r.error).toBe('string');
   });
   test('http error → ok:false', async () => {
     const r = await postKeysOrder(sb, { paymentId: 'p', itemId: 5, account: 'a@b.c' }, fakeFetch(null, false));

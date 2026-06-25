@@ -69,7 +69,7 @@ export function installKeysBridge(sb: SbApi, deps: KeysBridgeDeps): () => void {
       const paymentId = await resolveKeysPaymentId(sb, fetchImpl);
       if (!paymentId) { sb.bus.publish('booster-checkout.keys.purchase-result', { reqId, ok: false, error: 'no-payment' }); return; }
       const res = await postKeysOrder(sb, { paymentId, itemId, account }, fetchImpl);
-      if (!res.ok || !res.redirectUrl) { sb.bus.publish('booster-checkout.keys.purchase-result', { reqId, ok: false, error: res.error }); return; }
+      if (!res.ok || !res.redirectUrl) { sb.bus.publish('booster-checkout.keys.purchase-result', { reqId, ok: false, error: res.error, message: res.message }); return; }
       const opened = await deps.openPayment(res.redirectUrl, titles);
       sb.bus.publish('booster-checkout.keys.purchase-result', { reqId, ok: opened, error: opened ? undefined : 'window' });
     })();

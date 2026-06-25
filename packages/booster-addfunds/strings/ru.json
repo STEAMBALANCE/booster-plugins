@@ -19,7 +19,9 @@
     "keys_email_modal_placeholder":"you@example.com",
     "keys_email_modal_confirm":   "Продолжить",
     "keys_email_modal_cancel":    "Отмена",
-    "keys_email_modal_invalid":   "Введите корректный email"
+    "keys_email_modal_invalid":   "Введите корректный email",
+    "keys_error_modal_title":     "Упс!",
+    "keys_error_modal_close":     "Закрыть"
   },
   "general": {
     "product_display_name": "SteamBooster"

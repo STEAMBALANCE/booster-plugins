@@ -20,7 +20,7 @@ export function createKeysClient(sb: SbApi, opts: { timeoutMs?: number; retryMs?
 
   let activeListReqId: string | null = null;
   const listWaiters = new Map<string, (items: KeyItem[]) => void>();
-  const purchaseWaiters = new Map<string, (r: { status: 'ok' | 'email-required' | 'error'; error?: string }) => void>();
+  const purchaseWaiters = new Map<string, (r: { status: 'ok' | 'email-required' | 'error'; error?: string; message?: string }) => void>();
   const onReady: Array<() => void> = [];
 
   const subs: Array<() => void> = [];
@@ -36,9 +36,9 @@ export function createKeysClient(sb: SbApi, opts: { timeoutMs?: number; retryMs?
     if (w && d) { purchaseWaiters.delete(d.reqId!); w({ status: 'email-required' }); }
   }));
   subs.push(sb.bus.subscribe('booster-checkout.keys.purchase-result', (data) => {
-    const d = data as { reqId?: string; ok?: boolean; error?: string };
+    const d = data as { reqId?: string; ok?: boolean; error?: string; message?: string };
     const w = d && typeof d.reqId === 'string' ? purchaseWaiters.get(d.reqId) : undefined;
-    if (w && d) { purchaseWaiters.delete(d.reqId!); w(d.ok ? { status: 'ok' } : { status: 'error', error: d.error }); }
+    if (w && d) { purchaseWaiters.delete(d.reqId!); w(d.ok ? { status: 'ok' } : { status: 'error', error: d.error, message: d.message }); }
   }));
   subs.push(sb.bus.subscribe('booster-checkout.keys.ready', () => { for (const cb of onReady.splice(0)) cb(); }));
 
@@ -65,11 +65,11 @@ export function createKeysClient(sb: SbApi, opts: { timeoutMs?: number; retryMs?
     itemId: number,
     email?: string,
     titles?: { title: string; taskbarTitle: string },
-  ): Promise<{ status: 'ok' | 'email-required' | 'error'; error?: string }> {
+  ): Promise<{ status: 'ok' | 'email-required' | 'error'; error?: string; message?: string }> {
     const reqId = nextId();
     return new Promise((resolve) => {
       let done = false;
-      const finish = (r: { status: 'ok' | 'email-required' | 'error'; error?: string }): void => { if (done) return; done = true; clearTimeout(to); purchaseWaiters.delete(reqId); resolve(r); };
+      const finish = (r: { status: 'ok' | 'email-required' | 'error'; error?: string; message?: string }): void => { if (done) return; done = true; clearTimeout(to); purchaseWaiters.delete(reqId); resolve(r); };
       purchaseWaiters.set(reqId, finish);
       sb.bus.publish('booster-addfunds.keys.purchase', {
         reqId, itemId,

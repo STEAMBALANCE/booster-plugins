@@ -49,7 +49,7 @@ const item = (over: Partial<KeyItem> = {}): KeyItem => ({
   ...over,
 });
 
-interface PurchaseResult { status: 'ok' | 'email-required' | 'error'; error?: string }
+interface PurchaseResult { status: 'ok' | 'email-required' | 'error'; error?: string; message?: string }
 
 interface WindowTitles { title: string; taskbarTitle: string }
 
@@ -318,6 +318,40 @@ describe('registerAppPage', () => {
     // Both attempts (pre- and post-email) carry the same window titles.
     expect(keysClient.purchases[0]!.titles).toBeDefined();
     expect(keysClient.purchases[1]!.titles).toEqual(keysClient.purchases[0]!.titles);
+  });
+
+  test('purchase error with a human backend message → modal shows that message', async () => {
+    const { sb, pageReg } = makeSbStub();
+    const keysClient = makeKeysClient({
+      items: [item({ itemId: 101, packageId: 13533 })],
+      purchaseSeq: [{ status: 'error', message: 'Платёжный метод временно недоступен' }],
+    });
+    const errors: string[] = [];
+    registerAppPage(sb, { keysClient, openErrorModal: (m) => errors.push(m) });
+    setBody(oneBlockBody);
+    await reg(pageReg).mount(mountCtx());
+    await tick();
+    (document.querySelector('.booster-eo-buy') as HTMLButtonElement).click();
+    await tick();
+    expect(errors).toEqual(['Платёжный метод временно недоступен']);
+  });
+
+  test('purchase error with only a machine code (no message) → generic fallback, code not shown', async () => {
+    const { sb, pageReg } = makeSbStub();
+    const keysClient = makeKeysClient({
+      items: [item({ itemId: 101, packageId: 13533 })],
+      purchaseSeq: [{ status: 'error', error: 'no-payment' }],
+    });
+    const errors: string[] = [];
+    registerAppPage(sb, { keysClient, openErrorModal: (m) => errors.push(m) });
+    setBody(oneBlockBody);
+    await reg(pageReg).mount(mountCtx());
+    await tick();
+    (document.querySelector('.booster-eo-buy') as HTMLButtonElement).click();
+    await tick();
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toBeTruthy();
+    expect(errors[0]).not.toBe('no-payment'); // machine code never reaches the user
   });
 
   test('purchase needs email but user cancels → no 2nd purchaseKey', async () => {

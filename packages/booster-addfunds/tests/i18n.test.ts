@@ -26,3 +26,8 @@ test('key-purchase window titles resolve', () => {
   expect(LL.addfunds.keys_purchase_window_taskbar_title()).toBe('Покупка ключа');
   expect(LL.addfunds.keys_purchase_window_title({ gameName: 'Game X' })).toBe('Покупка ключа — «Game X»');
 });
+
+test('error-modal strings resolve', () => {
+  expect(LL.addfunds.keys_error_modal_title()).toBe('Упс!');
+  expect(LL.addfunds.keys_error_modal_close()).toBe('Закрыть');
+});

@@ -37,6 +37,7 @@ import type { KeyItem } from '../lib/keys-api';
 import { buildEditionOfferChip, ensureEditionOfferStyles } from '../components/edition-offer-chip';
 import { buildKeysBlock, ensureKeysStyles } from '../components/keys-block';
 import { openEmailModal as realOpenEmailModal } from '../components/email-modal';
+import { openErrorModal as realOpenErrorModal } from '../components/error-modal';
 import { buildTopupBar, ensureTopupStyles } from '../components/topup-bar';
 import { ensureSnapshotService, type UserSnapshot } from '../lib/user-snapshot';
 import { currencySym, defaultAmountForCurrency } from '../lib/currency';
@@ -55,12 +56,11 @@ const LOGO = typeof __SB_ADDFUNDS_LOGO_DATA_URI__ !== 'undefined' ? __SB_ADDFUND
 // either presentation uniformly.
 interface PurchaseHandle {
   setBusy(b: boolean): void;
-  setError(m: string | null): void;
 }
 
 interface KeysClient {
   requestKeys(appid: number, signal: AbortSignal): Promise<KeyItem[]>;
-  purchaseKey(itemId: number, email?: string, titles?: { title: string; taskbarTitle: string }): Promise<{ status: 'ok' | 'email-required' | 'error'; error?: string }>;
+  purchaseKey(itemId: number, email?: string, titles?: { title: string; taskbarTitle: string }): Promise<{ status: 'ok' | 'email-required' | 'error'; error?: string; message?: string }>;
   dispose(): void;
 }
 
@@ -69,11 +69,14 @@ interface AppPageDeps {
   keysClient?: KeysClient;
   /** Email-entry modal seam. Default: the real `openEmailModal`. */
   openEmailModal?: () => Promise<string | null>;
+  /** Purchase-error modal seam. Default: the real `openErrorModal`. */
+  openErrorModal?: (message: string) => void;
 }
 
 export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
   const keysClient = deps.keysClient ?? createKeysClient(sb);
   const openEmailModal = deps.openEmailModal ?? realOpenEmailModal;
+  const openErrorModal = deps.openErrorModal ?? realOpenErrorModal;
   const snap = ensureSnapshotService(sb);
 
   // Drive a key purchase from either the chip or a keys-block row. The handle's
@@ -81,7 +84,6 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
   // modal await (per spec) so the loader isn't spinning while the user types; it
   // re-arms only after a valid email is entered.
   async function runPurchase(item: KeyItem, handle: PurchaseHandle): Promise<void> {
-    handle.setError(null);
     handle.setBusy(true);
     // Payment-window titles: generic taskbar caption (no game name leaks into the
     // Windows taskbar), game-scoped heading inside the window. Opened by checkout's
@@ -99,7 +101,15 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
       r = await keysClient.purchaseKey(item.itemId, email, titles);
     }
     handle.setBusy(false);
-    if (r.status === 'error') handle.setError(LL.addfunds.keys_purchase_error());
+    if (r.status === 'error') {
+      // `message` is the human, server-supplied reason (RU) — show it; machine
+      // codes (`error`: timeout/network/no-payment/…) go to the console for
+      // diagnostics only, never to a RU user. Shown in a page-level Steam-styled
+      // modal, not inline next to the button.
+      if (r.error) console.error('[booster-addfunds] key purchase failed:', r.error);
+      const msg = (typeof r.message === 'string' && r.message.trim()) ? r.message.trim() : LL.addfunds.keys_purchase_error();
+      openErrorModal(msg);
+    }
     // r.status === 'ok' → checkout already opened the payment window
   }
 

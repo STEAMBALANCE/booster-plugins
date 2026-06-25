@@ -11,3 +11,7 @@ export const SB_SWIRL_SVG =
 // Static Windows platform icon (top-right of region key rows).
 export const WINDOWS_SVG =
   '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M3 5.1 10 4v8H3V5.1zM10 12.9V21l-7-1.1V12.9H10zM11.2 3.8 21 2v9.9l-9.8.1V3.8zM21 13.1V23l-9.8-1.4V13H21z"/></svg>';
+
+// Thin close (×) mark for the modal corner button.
+export const CLOSE_SVG =
+  '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M1.4.3.3 1.4 4.9 6 .3 10.6l1.1 1.1L6 7.1l4.6 4.6 1.1-1.1L7.1 6l4.6-4.6L10.6.3 6 4.9z"/></svg>';

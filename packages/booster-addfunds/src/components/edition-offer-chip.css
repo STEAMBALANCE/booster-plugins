@@ -43,12 +43,6 @@
   color: #fff; opacity: .7; font-size: 12px; line-height: 16px; white-space: nowrap;
 }
 
-/* Purchase-result error surfaced by setError — small red note inside the chip. */
-.booster-eo .booster-eo-error {
-  color: #ff6b6b; font-size: 11px; line-height: 14px; padding: 0 6px; max-width: 220px;
-}
-.booster-eo .booster-eo-error[hidden] { display: none; }
-
 /* Host modifier: turn the edition's native action into a flex row so the native
  * cluster sits left and our chip (margin-left:auto) pins right. The action's only
  * native child is .game_purchase_action_bg (CDP-verified), and the discount

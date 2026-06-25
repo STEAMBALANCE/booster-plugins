@@ -17,6 +17,8 @@ const ru = {
     keys_email_modal_invalid: 'Введите корректный email',
     keys_email_modal_placeholder: 'you@example.com',
     keys_email_modal_title: 'Куда отправить ключ?',
+    keys_error_modal_close: 'Закрыть',
+    keys_error_modal_title: 'Упс!',
     keys_item_coming_soon: 'Скоро в продаже',
     keys_purchase_error: 'Не удалось оформить заказ. Попробуйте ещё раз.',
     keys_purchase_window_taskbar_title: 'Покупка ключа',

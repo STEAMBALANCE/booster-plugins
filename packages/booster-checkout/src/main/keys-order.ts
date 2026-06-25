@@ -2,7 +2,9 @@ import type { SbApi } from '@steambalance/booster-framework/api-types';
 import { getBoosterHeaders } from './headers';
 import { URLS } from '../urls';
 
-export interface KeysOrderResult { ok: boolean; redirectUrl?: string; uid?: string; error?: string }
+// `message` is a human, server-supplied (RU) string safe to show the user.
+// `error` is a machine code for logs/telemetry — never user-facing.
+export interface KeysOrderResult { ok: boolean; redirectUrl?: string; uid?: string; error?: string; message?: string }
 
 export async function postKeysOrder(
   sb: SbApi,
@@ -22,8 +24,8 @@ export async function postKeysOrder(
     const uid = (typeof data.uid === 'string' ? data.uid : undefined)
       ?? (typeof body.uid === 'string' ? body.uid : undefined);
     if (!r.ok || body.success === false || !redirectUrl) {
-      const msg = typeof body.message === 'string' ? body.message : `HTTP ${r.status ?? '?'}`;
-      return { ok: false, error: msg };
+      const message = typeof body.message === 'string' && body.message.trim() ? body.message.trim() : undefined;
+      return { ok: false, error: `http-${r.status ?? '?'}`, message };
     }
     return { ok: true, redirectUrl, uid };
   } catch (e) {

@@ -1,0 +1,95 @@
+#booster-error-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.booster-error-card {
+  position: relative;
+  background: #1b2838;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  padding: 28px 32px;
+  width: 400px;
+  max-width: calc(100vw - 48px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  font-family: 'Motiva Sans', 'Nunito Sans', Arial, sans-serif;
+  color: #c6d4df;
+  box-sizing: border-box;
+}
+
+.booster-error-close-x {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: #8f98a0;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: color 0.12s ease, opacity 0.12s ease;
+}
+
+.booster-error-close-x:hover {
+  color: #fff;
+  opacity: 1;
+}
+
+.booster-error-title {
+  margin: 0 4px 12px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.booster-error-body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #c6d4df;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.booster-error-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.booster-error-close-btn {
+  padding: 9px 24px;
+  background: linear-gradient(to right, #75b022 0%, #588a1b 100%);
+  border: 0;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+
+.booster-error-close-btn:hover {
+  filter: brightness(1.12);
+}
+
+.booster-error-close-btn:focus {
+  outline: none;
+}
+
+.booster-error-close-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(102, 192, 244, 0.6);
+}

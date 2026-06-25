@@ -45,11 +45,6 @@
 #booster-keys-block .booster-keys-inactive-label {
   color: #fff; opacity: .7; font-size: 12px; line-height: 16px; white-space: nowrap;
 }
-/* Purchase-result error surfaced by the row handle's setError. */
-#booster-keys-block .booster-keys-error {
-  color: #ff6b6b; font-size: 11px; line-height: 14px; max-width: 220px;
-}
-#booster-keys-block .booster-keys-error[hidden] { display: none; }
 #booster-keys-block .booster-keys-os {
   position: absolute; top: 14px; right: 24px;
   display: inline-flex; align-items: center; color: #fff;

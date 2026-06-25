@@ -16,7 +16,6 @@ const SB_KEYS_CSS = typeof __SB_KEYS_CSS__ !== 'undefined' ? __SB_KEYS_CSS__ : S
 
 export interface KeyRowHandle {
   setBusy(b: boolean): void;
-  setError(m: string | null): void;
 }
 
 export interface KeysBlockOptions {
@@ -85,9 +84,6 @@ function buildRow(item: KeyItem, onBuy: (item: KeyItem, row: KeyRowHandle) => vo
   actions.className = 'booster-keys-actions'; // black chip, bottom-right (CSS)
 
   let buy: HTMLButtonElement | null = null;
-  const error = document.createElement('span');
-  error.className = 'booster-keys-error';
-  error.hidden = true;
 
   if (inactive) {
     // Inactive row: "Скоро в продаже" label, no price, no buy.
@@ -127,16 +123,11 @@ function buildRow(item: KeyItem, onBuy: (item: KeyItem, row: KeyRowHandle) => vo
     buy.appendChild(buyIcon);
     const handle: KeyRowHandle = {
       setBusy(b: boolean): void { if (buy) { buy.disabled = b; buy.classList.toggle('booster-keys-buy--busy', b); } },
-      setError(m: string | null): void {
-        if (m) { error.textContent = m; error.hidden = false; }
-        else { error.textContent = ''; error.hidden = true; }
-      },
     };
     buy.addEventListener('click', () => onBuy(item, handle));
     actions.appendChild(buy);
   }
 
-  actions.appendChild(error);
   row.appendChild(actions);
   return row;
 }

@@ -28,13 +28,12 @@ test('title + one row per item: name, region chip, price, discount, struck old p
   expect(rows[0]!.querySelector('.booster-keys-buy')!.textContent).toContain('Купить');
 });
 
-test('buy fires onBuy with the item and a row handle (setBusy/setError)', () => {
-  let got: { item: KeyItem; row: { setBusy(b: boolean): void; setError(m: string | null): void } } | null = null;
+test('buy fires onBuy with the item and a row handle (setBusy)', () => {
+  let got: { item: KeyItem; row: { setBusy(b: boolean): void } } | null = null;
   const el = buildKeysBlock([base], { onBuy: (item, row) => { got = { item, row }; } });
   (el.querySelector('.booster-keys-buy') as HTMLButtonElement).click();
   expect(got!.item.itemId).toBe(7);
   expect(typeof got!.row.setBusy).toBe('function');
-  expect(typeof got!.row.setError).toBe('function');
 });
 
 test('inactive item → "Скоро в продаже", no buy button', () => {
@@ -53,13 +52,13 @@ test('no discount → no badge, no struck price', () => {
 
 test('multiple items → multiple rows; row handle affects only that row', () => {
   const items: KeyItem[] = [base, { ...base, itemId: 8, name: 'Y' }];
-  const handles: Array<{ setBusy(b: boolean): void; setError(m: string | null): void }> = [];
+  const handles: Array<{ setBusy(b: boolean): void }> = [];
   const el = buildKeysBlock(items, { onBuy: (_i, row) => handles.push(row) });
   const buys = el.querySelectorAll('.booster-keys-buy');
   expect(buys.length).toBe(2);
   (buys[0] as HTMLButtonElement).click();
-  handles[0]!.setError('oops');
-  const rows = el.querySelectorAll('.booster-keys-row');
-  expect(rows[0]!.querySelector('.booster-keys-error')!.textContent).toBe('oops');
-  expect((rows[1]!.querySelector('.booster-keys-error') as HTMLElement).hidden).toBe(true);
+  (buys[1] as HTMLButtonElement).click();
+  handles[0]!.setBusy(true);
+  expect((buys[0] as HTMLButtonElement).disabled).toBe(true);
+  expect((buys[1] as HTMLButtonElement).disabled).toBe(false);
 });
