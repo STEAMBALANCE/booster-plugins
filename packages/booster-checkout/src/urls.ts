@@ -21,4 +21,5 @@ export const URLS = {
   popupLogoLink:      'https://steambalance.cc',
   support:            'https://jivo.chat/OdRu6JcBYZ',
   about:              'https://steambalance.cc',
+  steamKeysApi:       'https://steambalance.cc/api/services/steam_keys',
 } as const;

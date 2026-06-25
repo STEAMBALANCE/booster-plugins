@@ -44,3 +44,12 @@ export function fmtMoney(n: number, symbol: string): string {
   const num = n.toLocaleString('ru-RU').replace(RU_GROUP_SEP, ' ');
   return symbol ? `${num} ${symbol}` : num;
 }
+
+// Keys prices are \u20bd floats. Show up to 2 decimals (ru-RU comma), trimming a
+// pure-integer value to no decimals; thousands grouped to plain spaces.
+export function fmtMoneyKeys(n: number, symbol = '\u20bd'): string {
+  const hasFrac = Math.round(n * 100) % 100 !== 0;
+  const num = n.toLocaleString('ru-RU', hasFrac ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : { maximumFractionDigits: 0 })
+    .replace(RU_GROUP_SEP, ' ');
+  return symbol ? `${num} ${symbol}` : num;
+}

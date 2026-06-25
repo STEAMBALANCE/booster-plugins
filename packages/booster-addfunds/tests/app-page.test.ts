@@ -1,24 +1,20 @@
 // booster-plugins/packages/booster-addfunds/tests/app-page.test.ts
 //
 // Tests for registerAppPage — the /app/ page-router handler. Two branches:
-//   - region-locked page (detectRegionLock true) → fetch region keys and,
-//     if any, insert the keys block immediately after #error_box;
-//   - normal app page → topup bar and the keys offer chip are mutually
-//     exclusive (KEYS_COMING_SOON-gated): the bar lands at the top of the
-//     editions column (.leftcol.game_description_column), the chip in the
-//     first purchase row.
+//   - region-locked page (detectRegionLock true) → request keys over the bus
+//     and, if any, insert the keys block immediately after #error_box;
+//   - normal app page → request keys; matching editions (by subid) get an
+//     edition-offer chip and the topup bar is hidden; no match → topup bar at
+//     the top of the editions column + a dimmed «СКОРО» chip on the first block.
 //
-// happy-dom does not run scripts; we drive mount/unmount directly. The
-// stub mirrors addfunds.test.ts: it provides sb.scope.signal (a real
-// AbortSignal — ensureSnapshotService keys a WeakMap on it) and the bus
-// (the snapshot service subscribes + publishes on it). registerAppPage
-// accepts an optional 2nd arg { fetchRegionKeys } so tests inject a
-// deterministic keys fetcher.
+// happy-dom does not run scripts; we drive mount/unmount directly. Keys come
+// from an injected keysClient (no real bus round-trip) and the email modal is an
+// injected stub, so purchase flows are deterministic.
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { Window } from 'happy-dom';
 import { registerAppPage } from '../src/pages/app';
-import type { RegionKey } from '../src/lib/keys-api';
+import type { KeyItem } from '../src/lib/keys-api';
 
 function installDom(): Window {
   const w = new Window({ url: 'https://store.steampowered.com/app/570/' });
@@ -47,14 +43,41 @@ function setBody(html: string): void {
 
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 5));
 
-const keyFixture: RegionKey = {
-  id: 'k1',
-  gameName: 'Game X',
-  discountPercent: 32,
-  priceRub: 1599,
-  originalPriceRub: 2351,
-  platform: 'windows',
-};
+const item = (over: Partial<KeyItem> = {}): KeyItem => ({
+  itemId: 1, name: 'Game X', isActive: true, regionLabel: 'Global',
+  packageId: 13533, productType: 'base', price: 129.58, oldPrice: 199, discountPercent: 35,
+  ...over,
+});
+
+interface PurchaseResult { status: 'ok' | 'email-required' | 'error'; error?: string }
+
+interface TestKeysClient {
+  requestKeys: (appid: number, signal: AbortSignal) => Promise<KeyItem[]>;
+  purchaseKey: (itemId: number, email?: string) => Promise<PurchaseResult>;
+  dispose(): void;
+  purchases: Array<{ itemId: number; email?: string }>;
+}
+
+function makeKeysClient(opts: {
+  items?: KeyItem[];
+  requestKeys?: (appid: number, signal: AbortSignal) => Promise<KeyItem[]>;
+  purchaseSeq?: PurchaseResult[];
+} = {}): TestKeysClient {
+  const purchases: Array<{ itemId: number; email?: string }> = [];
+  let n = 0;
+  return {
+    purchases,
+    requestKeys: opts.requestKeys ?? (async () => opts.items ?? []),
+    purchaseKey: async (itemId: number, email?: string): Promise<PurchaseResult> => {
+      purchases.push({ itemId, email });
+      const seq = opts.purchaseSeq;
+      const r = seq ? (seq[Math.min(n, seq.length - 1)] ?? { status: 'ok' }) : { status: 'ok' };
+      n++;
+      return r;
+    },
+    dispose(): void {},
+  };
+}
 
 interface SbStub {
   sb: any;
@@ -85,6 +108,7 @@ function makeSbStub(): SbStub {
         getCurrentUserAsync: () => new Promise<unknown>(() => {}),
         onUserChange: () => () => {},
         openUrl: async () => {},
+        getStoreCountry: async () => 'RU',
       },
       lifecycle: { ready: async () => {}, rollbackAll: () => {}, _markReady: () => {} },
       scope: {
@@ -96,9 +120,50 @@ function makeSbStub(): SbStub {
   };
 }
 
-// Globals snapshot/restore (see addfunds.test.ts code-review M-5): installDom
-// assigns happy-dom globals onto globalThis; undo after each test so the
-// install does not bleed into the next file's beforeEach.
+const reg = (pageReg: SbStub['pageReg']) => pageReg.find((p) => p.name === 'booster-addfunds-app')!;
+const mountCtx = (url = 'https://store.steampowered.com/app/570/', signal = new AbortController().signal) =>
+  ({ url: new URL(url), signal });
+
+// DOM with two editions carrying matchable subids.
+const twoBlocksBody = `
+  <div class="leftcol game_description_column">
+    <div id="game_area_purchase" class="game_area_purchase">
+      <div class="game_area_purchase_game">
+        <div class="game_purchase_action"><div class="game_purchase_action_bg">
+          <input name="subid" value="13533">
+        </div></div>
+      </div>
+      <div class="game_area_purchase_game">
+        <div class="game_purchase_action"><div class="game_purchase_action_bg">
+          <input name="subid" value="13534">
+        </div></div>
+      </div>
+    </div>
+  </div>`;
+
+const oneBlockBody = `
+  <div class="leftcol game_description_column">
+    <div id="game_area_purchase" class="game_area_purchase">
+      <div class="game_area_purchase_game">
+        <div class="game_purchase_action"><div class="game_purchase_action_bg">
+          <input name="subid" value="13533">
+        </div></div>
+      </div>
+    </div>
+  </div>`;
+
+// One edition with a readable price but no usable subid → no match → empty branch.
+const editionBody = `
+  <div class="leftcol game_description_column">
+    <div id="game_area_purchase" class="game_area_purchase">
+      <div class="game_area_purchase_game">
+        <div class="game_purchase_action"><div class="game_purchase_action_bg">
+          <div class="game_purchase_price price" data-price-final="760000">7 600₸</div>
+        </div></div>
+      </div>
+    </div>
+  </div>`;
+
 const SNAPSHOT_KEYS = [
   'window', 'document', 'history', 'location', 'MutationObserver',
   'Event', 'KeyboardEvent', 'HTMLElement', 'HTMLInputElement',
@@ -109,9 +174,7 @@ let snapGlobals: Record<string, unknown> = {};
 describe('registerAppPage', () => {
   beforeEach(() => {
     snapGlobals = {};
-    for (const k of SNAPSHOT_KEYS) {
-      snapGlobals[k] = (globalThis as Record<string, unknown>)[k];
-    }
+    for (const k of SNAPSHOT_KEYS) snapGlobals[k] = (globalThis as Record<string, unknown>)[k];
     installDom();
   });
 
@@ -123,13 +186,9 @@ describe('registerAppPage', () => {
     }
   });
 
-  test('normal app page → topup bar at the top of the editions/buy column', async () => {
+  test('normal page, no keys → topup bar at top of editions column, prefilled', async () => {
     const { sb, pageReg } = makeSbStub();
-    registerAppPage(sb);
-    // Real Steam structure: the queue-actions panel sits above the content; the
-    // "Издания"/"Купить" blocks live in .leftcol.game_description_column as
-    // #game_area_purchase. The bar must land at the TOP of that column (above
-    // the editions), NOT nested in the queue panel.
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [] }) });
     setBody(`
       <div class="queue_and_playtime"><div id="queueCtn" class="queue_ctn"><div id="queueActionsCtn" class="queue_actions_ctn">В желаемое</div></div></div>
       <div class="leftcol game_description_column">
@@ -138,32 +197,27 @@ describe('registerAppPage', () => {
           <div class="game_purchase_price price" data-price-final="760000">7 600₸</div>
         </div>
       </div>`);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    await reg.mount({ url: new URL('https://store.steampowered.com/app/570/'), signal: new AbortController().signal });
+    await reg(pageReg).mount(mountCtx());
     await tick();
     const bar = document.getElementById('booster-topup-bar')!;
     expect(bar).not.toBeNull();
-    // Not nested in the queue panel.
     expect(bar.closest('#queueCtn')).toBeNull();
-    // In the editions/buy column, as its first (top) element — above #game_area_purchase.
     const col = document.querySelector('.leftcol.game_description_column')!;
     expect(bar.parentElement).toBe(col);
     expect(col.firstElementChild).toBe(bar);
-    // Prefilled with the first edition's price (data-price-final 760000 ÷ 100).
     expect((bar.querySelector('.booster-topup-input') as HTMLInputElement).value).toBe('7600');
   });
 
-  test('normal app page with no readable price → bar stays empty (placeholder)', async () => {
+  test('normal page, no keys + no readable price → bar stays empty (placeholder)', async () => {
     const { sb, pageReg } = makeSbStub();
-    registerAppPage(sb);
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [] }) });
     setBody(`
       <div class="leftcol game_description_column">
         <div id="game_area_purchase" class="game_area_purchase">
           <div class="game_purchase_price price">Бесплатно</div>
         </div>
       </div>`);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    await reg.mount({ url: new URL('https://store.steampowered.com/app/570/'), signal: new AbortController().signal });
+    await reg(pageReg).mount(mountCtx());
     await tick();
     const bar = document.getElementById('booster-topup-bar')!;
     expect(bar).not.toBeNull();
@@ -172,178 +226,158 @@ describe('registerAppPage', () => {
 
   test('region page + keys → keys block after #error_box', async () => {
     const { sb, pageReg } = makeSbStub();
-    registerAppPage(sb, { fetchRegionKeys: async () => [keyFixture] });
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [item({ packageId: 22350 })] }) });
     setBody(`<div class="redeemwalletcode_marker"></div><div id="error_box"><span class="error">Данный товар недоступен в вашем регионе</span></div>`);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    await reg.mount({ url: new URL('https://store.steampowered.com/app/22350/'), signal: new AbortController().signal });
+    await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/22350/'));
     await tick();
     const block = document.getElementById('booster-keys-block')!;
     expect(block).not.toBeNull();
     expect(document.getElementById('error_box')!.nextElementSibling).toBe(block);
+    expect(document.getElementById('booster-edition-offer-style')).toBeNull(); // region path uses no chip styles
   });
 
   test('region page + no keys → nothing', async () => {
     const { sb, pageReg } = makeSbStub();
-    registerAppPage(sb, { fetchRegionKeys: async () => [] });
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [] }) });
     setBody(`<div id="error_box"><span class="error">Данный товар недоступен в вашем регионе</span></div>`);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    await reg.mount({ url: new URL('https://store.steampowered.com/app/22350/'), signal: new AbortController().signal });
+    await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/22350/'));
     await tick();
     expect(document.getElementById('booster-keys-block')).toBeNull();
     expect(document.getElementById('booster-topup-bar')).toBeNull();
   });
 
-  test('normal page → first action gets booster-dist-host + our chip last; other blocks untouched', async () => {
+  test('normal page, two matching editions → two chips, no topup, buy → purchaseKey(itemId)', async () => {
     const { sb, pageReg } = makeSbStub();
-    registerAppPage(sb, { comingSoon: false }); // live mode: full chip from the DOM-derived offer
-    setBody(`
-      <div class="leftcol game_description_column">
-        <div id="game_area_purchase" class="game_area_purchase">
-          <div class="game_area_purchase_game_wrapper">
-            <div class="game_area_purchase_game">
-              <h2 class="title">Купить Game X</h2>
-              <div class="game_purchase_action">
-                <div class="game_purchase_action_bg">
-                  <div class="game_purchase_price price" data-price-final="760000">7 600₸</div>
-                  <div class="btn_addtocart"><a class="btn_green_steamui">В корзине</a></div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="game_area_purchase_game">
-            <div class="game_purchase_action"><div class="game_purchase_action_bg">
-              <div class="game_purchase_price price" data-price-final="290000">2 900₸</div>
-            </div></div>
-          </div>
-        </div>
-      </div>`);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    await reg.mount({ url: new URL('https://store.steampowered.com/app/570/'), signal: new AbortController().signal });
+    const keysClient = makeKeysClient({ items: [
+      item({ itemId: 101, packageId: 13533 }),
+      item({ itemId: 102, packageId: 13534 }),
+    ] });
+    registerAppPage(sb, { keysClient, openEmailModal: async () => 'a@b.c' });
+    setBody(twoBlocksBody);
+    await reg(pageReg).mount(mountCtx());
     await tick();
-    const blocks = document.querySelectorAll('.game_area_purchase_game');
-    const action = blocks[0]!.querySelector('.game_purchase_action') as HTMLElement;
-    expect(action.classList.contains('booster-dist-host')).toBe(true);
-    const chip = document.getElementById('booster-edition-offer')!;
-    expect(chip).not.toBeNull();
-    expect(action.lastElementChild).toBe(chip);
-    expect(chip.querySelector('.booster-eo-now')!.textContent).toBe('5 168 ₸'); // 7600 -32%
-    expect(chip.querySelector('.booster-eo-was')!.textContent).toBe('7 600 ₸');
-    // second block untouched
-    expect(blocks[1]!.querySelector('#booster-edition-offer')).toBeNull();
-    expect(blocks[1]!.querySelector('.game_purchase_action')!.classList.contains('booster-dist-host')).toBe(false);
+    const chips = document.querySelectorAll('.booster-eo');
+    expect(chips.length).toBe(2);
+    expect(document.getElementById('booster-topup-bar')).toBeNull();
+    // First chip lives in the first block (subid 13533 → item 101).
+    (chips[0]!.querySelector('.booster-eo-buy') as HTMLButtonElement).click();
+    await tick();
+    expect(keysClient.purchases.length).toBe(1);
+    expect(keysClient.purchases[0]!.itemId).toBe(101);
   });
 
-  test('edition offer is idempotent across a re-mount', async () => {
+  test('normal page, keys present but none match a subid → topup + a «СКОРО» chip', async () => {
     const { sb, pageReg } = makeSbStub();
-    registerAppPage(sb);
-    setBody(`<div class="leftcol game_description_column"><div id="game_area_purchase"><div class="game_area_purchase_game"><div class="game_purchase_action"><div class="game_purchase_action_bg"><div class="game_purchase_price price" data-price-final="760000">7 600₸</div></div></div></div></div></div>`);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    const sig = new AbortController().signal;
-    await reg.mount({ url: new URL('https://store.steampowered.com/app/570/'), signal: sig });
-    await tick();
-    await reg.mount({ url: new URL('https://store.steampowered.com/app/570/'), signal: sig });
-    await tick();
-    expect(document.querySelectorAll('#booster-edition-offer').length).toBe(1);
-  });
-
-  test('region page → no edition offer (mountRegion path untouched)', async () => {
-    const { sb, pageReg } = makeSbStub();
-    registerAppPage(sb, { fetchRegionKeys: async () => [keyFixture] });
-    setBody(`<div class="redeemwalletcode_marker"></div><div id="error_box"><span class="error">Данный товар недоступен в вашем регионе</span></div>`);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    await reg.mount({ url: new URL('https://store.steampowered.com/app/22350/'), signal: new AbortController().signal });
-    await tick();
-    expect(document.getElementById('booster-edition-offer')).toBeNull();
-  });
-
-  // DOM with a first edition that carries a final price → installs the chip.
-  const editionBody = `
-    <div class="leftcol game_description_column">
-      <div id="game_area_purchase" class="game_area_purchase">
-        <div class="game_area_purchase_game">
-          <div class="game_purchase_action">
-            <div class="game_purchase_action_bg">
-              <div class="game_purchase_price price" data-price-final="760000">7 600₸</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>`;
-
-  test('interim (coming-soon) normal page → topup bar AND a dimmed «Купить»-only chip with «СКОРО»', async () => {
-    // Interim: keys API not wired. Пополнялка всегда видна; оффер сведён к одной
-    // кнопке «Купить» с плашкой «СКОРО» (без скидки/цены).
-    const { sb, pageReg } = makeSbStub();
-    registerAppPage(sb, { comingSoon: true });
+    // item packageId 99999 matches no block on the page → empty branch.
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [item({ packageId: 99999 })] }) });
     setBody(editionBody);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    await reg.mount({ url: new URL('https://store.steampowered.com/app/570/'), signal: new AbortController().signal });
+    await reg(pageReg).mount(mountCtx());
     await tick();
     expect(document.getElementById('booster-topup-bar')).not.toBeNull();
-    const chip = document.getElementById('booster-edition-offer')!;
+    const chip = document.querySelector('.booster-eo')!;
     expect(chip).not.toBeNull();
     expect(chip.classList.contains('booster-eo--soon')).toBe(true);
-    expect(chip.querySelector('.booster-eo-now')).toBeNull();   // price hidden
-    expect(chip.querySelector('.booster-eo-discount')).toBeNull(); // discount hidden
-    const badge = chip.querySelector('.booster-eo-buy .booster-eo-soon');
-    expect(badge).not.toBeNull();
-    expect(badge!.textContent).toBe('СКОРО');
+    expect(chip.querySelector('.booster-eo-now')).toBeNull();
+    expect(chip.querySelector('.booster-eo-soon')!.textContent).toBe('СКОРО');
   });
 
-  test('live + keys (resolveEditionOffer → offer) → full chip, topup hidden (mutual exclusion)', async () => {
+  test('purchase needs email → openEmailModal invoked, 2nd purchaseKey carries the email', async () => {
     const { sb, pageReg } = makeSbStub();
-    const offer = { ourPrice: 5168, steamPrice: 7600, discountPercent: 32, currencySymbol: '₸' };
-    registerAppPage(sb, { comingSoon: false, resolveEditionOffer: async () => offer });
-    setBody(editionBody);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    await reg.mount({ url: new URL('https://store.steampowered.com/app/570/'), signal: new AbortController().signal });
+    const keysClient = makeKeysClient({
+      items: [item({ itemId: 101, packageId: 13533 })],
+      purchaseSeq: [{ status: 'email-required' }, { status: 'ok' }],
+    });
+    let modalCalls = 0;
+    registerAppPage(sb, { keysClient, openEmailModal: async () => { modalCalls++; return 'buyer@mail.com'; } });
+    setBody(oneBlockBody);
+    await reg(pageReg).mount(mountCtx());
     await tick();
-    const chip = document.getElementById('booster-edition-offer')!;
-    expect(chip).not.toBeNull();
-    expect(chip.querySelector('.booster-eo-now')!.textContent).toBe('5 168 ₸');
-    expect(chip.classList.contains('booster-eo--soon')).toBe(false);
-    expect(document.getElementById('booster-topup-bar')).toBeNull(); // keys present → topup скрыта
+    (document.querySelector('.booster-eo-buy') as HTMLButtonElement).click();
+    await tick(); await tick();
+    expect(modalCalls).toBe(1);
+    expect(keysClient.purchases.length).toBe(2);
+    expect(keysClient.purchases[0]!.email).toBeUndefined();
+    expect(keysClient.purchases[1]!).toEqual({ itemId: 101, email: 'buyer@mail.com' });
   });
 
-  test('live + no keys (resolveEditionOffer → null) → topup shown, no chip', async () => {
+  test('purchase needs email but user cancels → no 2nd purchaseKey', async () => {
     const { sb, pageReg } = makeSbStub();
-    registerAppPage(sb, { comingSoon: false, resolveEditionOffer: async () => null });
-    setBody(editionBody);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    await reg.mount({ url: new URL('https://store.steampowered.com/app/570/'), signal: new AbortController().signal });
+    const keysClient = makeKeysClient({
+      items: [item({ itemId: 101, packageId: 13533 })],
+      purchaseSeq: [{ status: 'email-required' }, { status: 'ok' }],
+    });
+    registerAppPage(sb, { keysClient, openEmailModal: async () => null });
+    setBody(oneBlockBody);
+    await reg(pageReg).mount(mountCtx());
     await tick();
-    expect(document.getElementById('booster-edition-offer')).toBeNull();
-    expect(document.getElementById('booster-topup-bar')).not.toBeNull(); // нет ключей → пополнялка
+    (document.querySelector('.booster-eo-buy') as HTMLButtonElement).click();
+    await tick(); await tick();
+    expect(keysClient.purchases.length).toBe(1);
   });
 
-  test('interim teardown removes both the topup bar and the chip', async () => {
+  test('teardown removes the topup bar and the «СКОРО» chip (and the shared style)', async () => {
     const { sb, pageReg } = makeSbStub();
-    registerAppPage(sb, { comingSoon: true });
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [] }) });
     setBody(editionBody);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    const teardown = await reg.mount({ url: new URL('https://store.steampowered.com/app/570/'), signal: new AbortController().signal });
+    const teardown = await reg(pageReg).mount(mountCtx());
     await tick();
     expect(document.getElementById('booster-topup-bar')).not.toBeNull();
-    expect(document.getElementById('booster-edition-offer')).not.toBeNull();
+    expect(document.querySelector('.booster-eo')).not.toBeNull();
     expect(typeof teardown).toBe('function');
     (teardown as () => void)();
     expect(document.getElementById('booster-topup-bar')).toBeNull();
-    expect(document.getElementById('booster-edition-offer')).toBeNull();
+    expect(document.querySelector('.booster-eo')).toBeNull();
+    expect(document.getElementById('booster-edition-offer-style')).toBeNull();
   });
 
-  test('live: signal aborted while resolving the offer → nothing mounts', async () => {
+  test('multi-chip teardown drops the shared style only after the LAST chip is gone', async () => {
+    const { sb, pageReg } = makeSbStub();
+    const keysClient = makeKeysClient({ items: [
+      item({ itemId: 101, packageId: 13533 }),
+      item({ itemId: 102, packageId: 13534 }),
+    ] });
+    registerAppPage(sb, { keysClient });
+    setBody(twoBlocksBody);
+    const teardown = await reg(pageReg).mount(mountCtx());
+    await tick();
+    expect(document.querySelectorAll('.booster-eo').length).toBe(2);
+    expect(document.getElementById('booster-edition-offer-style')).not.toBeNull();
+    (teardown as () => void)();
+    expect(document.querySelectorAll('.booster-eo').length).toBe(0);
+    expect(document.getElementById('booster-edition-offer-style')).toBeNull();
+  });
+
+  test('region page → no edition chip on the page', async () => {
+    const { sb, pageReg } = makeSbStub();
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [item({ packageId: 22350 })] }) });
+    setBody(`<div class="redeemwalletcode_marker"></div><div id="error_box"><span class="error">Данный товар недоступен в вашем регионе</span></div>`);
+    await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/22350/'));
+    await tick();
+    expect(document.querySelector('.booster-eo')).toBeNull();
+  });
+
+  test('idempotent across a re-mount → one chip', async () => {
+    const { sb, pageReg } = makeSbStub();
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [item({ itemId: 101, packageId: 13533 })] }) });
+    setBody(oneBlockBody);
+    const sig = new AbortController().signal;
+    await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/570/', sig));
+    await tick();
+    await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/570/', sig));
+    await tick();
+    expect(document.querySelectorAll('.booster-eo').length).toBe(1);
+  });
+
+  test('signal aborted after requestKeys resolves → nothing mounts', async () => {
     const { sb, pageReg } = makeSbStub();
     const ctrl = new AbortController();
-    registerAppPage(sb, {
-      comingSoon: false,
-      // Resolve an offer but abort mid-flight: the post-await guard must bail.
-      resolveEditionOffer: async () => { ctrl.abort(); return { ourPrice: 5168, steamPrice: 7600, discountPercent: 32, currencySymbol: '₸' }; },
-    });
-    setBody(editionBody);
-    const reg = pageReg.find((p) => p.name === 'booster-addfunds-app')!;
-    const teardown = await reg.mount({ url: new URL('https://store.steampowered.com/app/570/'), signal: ctrl.signal });
+    registerAppPage(sb, { keysClient: makeKeysClient({
+      requestKeys: async () => { ctrl.abort(); return [item({ itemId: 101, packageId: 13533 })]; },
+    }) });
+    setBody(oneBlockBody);
+    const teardown = await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/570/', ctrl.signal));
     await tick();
-    expect(document.getElementById('booster-edition-offer')).toBeNull();
+    expect(document.querySelector('.booster-eo')).toBeNull();
     expect(document.getElementById('booster-topup-bar')).toBeNull();
     expect(teardown).toBeUndefined();
   });

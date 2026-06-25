@@ -1,7 +1,7 @@
 import { test, expect, beforeEach } from 'bun:test';
 import { Window } from 'happy-dom';
 import { buildEditionOfferChip } from '../src/components/edition-offer-chip';
-import type { EditionOffer } from '../src/lib/edition-offer';
+import type { KeyItem } from '../src/lib/keys-api';
 
 beforeEach(() => {
   const w = new Window({ url: 'https://store.steampowered.com/app/570/' });
@@ -12,63 +12,52 @@ beforeEach(() => {
   });
 });
 
-const offer: EditionOffer = { ourPrice: 5168, steamPrice: 7600, discountPercent: 32, currencySymbol: '₸' };
+const base: KeyItem = { itemId: 1, name: 'X', isActive: true, regionLabel: 'Global', packageId: 13533, productType: 'base', price: 129.58, oldPrice: null, discountPercent: 0 };
 
-test('renders badge, struck "was", "now", and a no-op buy button with swirl', () => {
-  const el = buildEditionOfferChip(offer);
-  expect(el.id).toBe('booster-edition-offer');
-  expect(el.getAttribute('aria-label')).toBe('Предложение SteamBalance — купить дешевле');
-  expect(el.querySelector('.booster-eo-discount')!.textContent).toBe('-32%');
-  expect(el.querySelector('.booster-eo-was')!.textContent).toBe('7 600 ₸');
-  expect(el.querySelector('.booster-eo-now')!.textContent).toBe('5 168 ₸');
-  const buy = el.querySelector('.booster-eo-buy') as HTMLButtonElement;
-  expect(buy.getAttribute('type')).toBe('button');
-  expect(buy.textContent).toContain('Купить');
-  expect(el.querySelector('.booster-eo-buy .booster-eo-buy-icon svg')).not.toBeNull();
-  expect(() => buy.dispatchEvent(new Event('click'))).not.toThrow();
+test('active item: price + buy fires onBuy', () => {
+  let clicked = 0;
+  const { root } = buildEditionOfferChip({ item: base, onBuy: () => clicked++ });
+  expect(root.querySelector('.booster-eo-now')!.textContent).toBe('129,58 ₽');
+  (root.querySelector('.booster-eo-buy') as HTMLButtonElement).click();
+  expect(clicked).toBe(1);
 });
 
-test('discountPercent 0 → no badge; steamPrice<=ourPrice → no struck "was"', () => {
-  const el = buildEditionOfferChip({ ourPrice: 7600, steamPrice: 7600, discountPercent: 0, currencySymbol: '₸' });
-  expect(el.querySelector('.booster-eo-discount')).toBeNull();
-  expect(el.querySelector('.booster-eo-was')).toBeNull();
-  expect(el.querySelector('.booster-eo-now')!.textContent).toBe('7 600 ₸');
+test('discount + old price', () => {
+  const { root } = buildEditionOfferChip({ item: { ...base, price: 73.71, oldPrice: 99, discountPercent: 26 } });
+  expect(root.querySelector('.booster-eo-was')!.textContent).toBe('99 ₽');
+  expect(root.querySelector('.booster-eo-discount')!.textContent).toBe('-26%');
 });
 
-test('showDiscount:false hides the discount badge even when discountPercent > 0', () => {
-  const el = buildEditionOfferChip(offer, { showDiscount: false });
-  expect(el.querySelector('.booster-eo-discount')).toBeNull();
-  // prices + buy still present (only discount hidden)
-  expect(el.querySelector('.booster-eo-prices')).not.toBeNull();
-  expect(el.querySelector('.booster-eo-buy')).not.toBeNull();
+test('inactive: Скоро в продаже, no button', () => {
+  const { root } = buildEditionOfferChip({ item: { ...base, isActive: false } });
+  expect(root.classList.contains('booster-eo--inactive')).toBe(true);
+  expect(root.querySelector('.booster-eo-buy')).toBeNull();
 });
 
-test('showPrice:false hides the entire prices block but keeps discount + buy', () => {
-  const el = buildEditionOfferChip(offer, { showPrice: false });
-  expect(el.querySelector('.booster-eo-prices')).toBeNull();
-  expect(el.querySelector('.booster-eo-was')).toBeNull();
-  expect(el.querySelector('.booster-eo-now')).toBeNull();
-  expect(el.querySelector('.booster-eo-discount')).not.toBeNull();
-  expect(el.querySelector('.booster-eo-buy')).not.toBeNull();
+test('comingSoon badge, no price', () => {
+  const { root } = buildEditionOfferChip({ comingSoon: true });
+  expect(root.querySelector('.booster-eo-soon')!.textContent).toBe('СКОРО');
+  expect(root.querySelector('.booster-eo-now')).toBeNull();
 });
 
-test('comingSoon:true → only the buy button with a «СКОРО» badge inside it, root marked', () => {
-  // The interim coming-soon preset: discount + price hidden, badge added.
-  const el = buildEditionOfferChip(offer, { showDiscount: false, showPrice: false, comingSoon: true });
-  expect(el.classList.contains('booster-eo--soon')).toBe(true);
-  expect(el.querySelector('.booster-eo-discount')).toBeNull();
-  expect(el.querySelector('.booster-eo-prices')).toBeNull();
-  const buy = el.querySelector('.booster-eo-buy') as HTMLButtonElement;
-  expect(buy).not.toBeNull();
-  expect(buy.textContent).toContain('Купить');
-  // «СКОРО» badge lives INSIDE the button (so it positions relative to it).
-  const badge = buy.querySelector('.booster-eo-soon');
-  expect(badge).not.toBeNull();
-  expect(badge!.textContent).toBe('СКОРО');
+test('root uses class booster-eo (not the old singleton id), keeps data-sb', () => {
+  const { root } = buildEditionOfferChip({ item: base });
+  expect(root.classList.contains('booster-eo')).toBe(true);
+  expect(root.id).toBe('');
+  expect(root.getAttribute('data-sb')).toBe('1');
 });
 
-test('comingSoon defaults off → no badge, no soon modifier', () => {
-  const el = buildEditionOfferChip(offer);
-  expect(el.classList.contains('booster-eo--soon')).toBe(false);
-  expect(el.querySelector('.booster-eo-soon')).toBeNull();
+test('setBusy disables the buy button; setError toggles the error span', () => {
+  const { root, setBusy, setError } = buildEditionOfferChip({ item: base, onBuy: () => {} });
+  const buy = root.querySelector('.booster-eo-buy') as HTMLButtonElement;
+  setBusy(true);
+  expect(buy.disabled).toBe(true);
+  setBusy(false);
+  expect(buy.disabled).toBe(false);
+  setError('boom');
+  const err = root.querySelector('.booster-eo-error') as HTMLElement;
+  expect(err.textContent).toBe('boom');
+  expect(err.hidden).toBe(false);
+  setError(null);
+  expect(err.hidden).toBe(true);
 });

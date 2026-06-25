@@ -25,3 +25,7 @@ desktop.ini
 packages/booster-checkout/src/__watch_test_trigger__.ts
 packages/booster-checkout/popup-svelte/__watch_test_trigger__.svelte
 packages/booster-addfunds/src/__watch_test_trigger__.ts
+
+# Superpowers / subagent-driven-development scratch (ledger, briefs, review
+# diffs). Local-only working state — NEVER commit to the public repo.
+.superpowers/

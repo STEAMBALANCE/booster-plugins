@@ -1,9 +1,12 @@
-// Edition offer chip — embedded in the first edition's purchase row on a normal
-// /app/ page. Plain DOM (store target has no Svelte), scoped via #booster-edition-offer.
-// Visual = distribution.xml frame 319:908 (our offer; the green 319:927 left
-// block there is the native Steam block, reference only). The buy button is a no-op stub.
-import type { EditionOffer } from '../lib/edition-offer';
-import { fmtMoney } from '../lib/currency';
+// Edition offer chip — embedded in an edition's purchase row on a normal /app/
+// page. Plain DOM (store target has no Svelte), styles injected once via
+// <style id="booster-edition-offer-style"> and scoped on the .booster-eo class.
+// Visual = distribution.xml frame 319:908. Now keys-driven: an active KeyItem
+// renders price/discount + a live «Купить» button; an inactive item shows a
+// "Скоро в продаже" label with no button; the standalone comingSoon empty-state
+// keeps the dimmed «Купить» + «СКОРО» badge.
+import type { KeyItem } from '../lib/keys-api';
+import { fmtMoneyKeys } from '../lib/currency';
 import { SB_SWIRL_SVG } from '../lib/icons';
 import { LL } from '../i18n';
 import SB_EDITION_OFFER_CSS_RAW from './edition-offer-chip.css' with { type: 'text' };
@@ -20,77 +23,105 @@ export function ensureEditionOfferStyles(): void {
   document.head.appendChild(s);
 }
 
-/**
- * Presentation options for the edition offer chip. All blocks default to
- * visible (= current behavior); each can be hidden independently.
- *
- * `comingSoon` is the INTERIM preset (no keys API yet): callers pass
- * `{ showDiscount: false, showPrice: false, comingSoon: true }` so only the
- * «Купить» button remains, dimmed, with a «СКОРО» badge straddling its top
- * edge (see edition-offer-chip.css `.booster-eo--soon`). Drop the flag (and
- * the coming-soon module in lib/) to return to the full chip when the API lands.
- */
-export interface EditionOfferChipOptions {
-  showDiscount?: boolean; // default true (still gated on offer.discountPercent > 0)
-  showPrice?: boolean;    // default true
-  comingSoon?: boolean;   // default false → adds «СКОРО» badge + dim modifier
+export interface EditionChipOptions {
+  /** Real offer; omit for the comingSoon empty-state. */
+  item?: KeyItem;
+  /** Empty-state «СКОРО» badge variant (dimmed no-op button). */
+  comingSoon?: boolean;
+  /** Wired for real active items only. */
+  onBuy?: () => void;
 }
 
-export function buildEditionOfferChip(
-  offer: EditionOffer,
-  opts: EditionOfferChipOptions = {},
-): HTMLElement {
-  const showDiscount = opts.showDiscount ?? true;
-  const showPrice = opts.showPrice ?? true;
+export interface EditionChip {
+  root: HTMLElement;
+  setBusy(b: boolean): void;
+  setError(m: string | null): void;
+}
+
+export function buildEditionOfferChip(opts: EditionChipOptions): EditionChip {
+  const item = opts.item;
   const comingSoon = opts.comingSoon ?? false;
+  const inactive = item != null && item.isActive === false;
 
   const root = document.createElement('div');
-  root.id = 'booster-edition-offer';
-  if (comingSoon) root.classList.add('booster-eo--soon');
+  root.className = 'booster-eo';
   root.setAttribute('data-sb', '1');
   root.setAttribute('aria-label', LL.addfunds.edition_offer_aria_label());
+  if (comingSoon) root.classList.add('booster-eo--soon');
+  if (inactive) root.classList.add('booster-eo--inactive');
 
-  if (showDiscount && offer.discountPercent > 0) {
-    const badge = document.createElement('span');
-    badge.className = 'booster-eo-discount';
-    badge.textContent = `-${offer.discountPercent}%`;
-    root.appendChild(badge);
-  }
+  let buy: HTMLButtonElement | null = null;
 
-  if (showPrice) {
-    const prices = document.createElement('div');
-    prices.className = 'booster-eo-prices';
-    if (offer.steamPrice > offer.ourPrice) {
-      const was = document.createElement('span');
-      was.className = 'booster-eo-was';
-      was.textContent = fmtMoney(offer.steamPrice, offer.currencySymbol);
-      prices.appendChild(was);
+  if (inactive) {
+    // Inactive item: "Скоро в продаже" label, no buy button, no price.
+    const label = document.createElement('span');
+    label.className = 'booster-eo-inactive-label';
+    label.textContent = LL.addfunds.keys_item_coming_soon();
+    root.appendChild(label);
+  } else {
+    // Active item OR the standalone comingSoon empty-state.
+    if (item) {
+      if (item.discountPercent > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'booster-eo-discount';
+        badge.textContent = `-${item.discountPercent}%`;
+        root.appendChild(badge);
+      }
+      const prices = document.createElement('div');
+      prices.className = 'booster-eo-prices';
+      if (item.oldPrice != null && item.oldPrice > item.price) {
+        const was = document.createElement('span');
+        was.className = 'booster-eo-was';
+        was.textContent = fmtMoneyKeys(item.oldPrice);
+        prices.appendChild(was);
+      }
+      const now = document.createElement('span');
+      now.className = 'booster-eo-now';
+      now.textContent = fmtMoneyKeys(item.price);
+      prices.appendChild(now);
+      root.appendChild(prices);
     }
-    const now = document.createElement('span');
-    now.className = 'booster-eo-now';
-    now.textContent = fmtMoney(offer.ourPrice, offer.currencySymbol);
-    prices.appendChild(now);
-    root.appendChild(prices);
+
+    buy = document.createElement('button');
+    buy.type = 'button';
+    buy.className = 'booster-eo-buy';
+    buy.textContent = LL.addfunds.keys_buy_button();
+    const icon = document.createElement('span');
+    icon.className = 'booster-eo-buy-icon';
+    icon.innerHTML = SB_SWIRL_SVG;
+    buy.appendChild(icon);
+    if (comingSoon) {
+      // «СКОРО» badge lives inside the button so it positions relative to it
+      // (centered on the top edge, protruding 50% up — CSS owns the geometry).
+      const soon = document.createElement('span');
+      soon.className = 'booster-eo-soon';
+      soon.textContent = LL.addfunds.edition_offer_soon_badge();
+      buy.appendChild(soon);
+    }
+    if (opts.onBuy) {
+      const onBuy = opts.onBuy;
+      buy.addEventListener('click', () => onBuy());
+    }
+    root.appendChild(buy);
   }
 
-  const buy = document.createElement('button');
-  buy.type = 'button';
-  buy.className = 'booster-eo-buy';
-  buy.textContent = LL.addfunds.keys_buy_button();
-  const icon = document.createElement('span');
-  icon.className = 'booster-eo-buy-icon';
-  icon.innerHTML = SB_SWIRL_SVG;
-  buy.appendChild(icon);
-  if (comingSoon) {
-    // «СКОРО» badge lives inside the button so it positions relative to it
-    // (centered on the top edge, protruding 50% up — CSS owns the geometry).
-    const soon = document.createElement('span');
-    soon.className = 'booster-eo-soon';
-    soon.textContent = LL.addfunds.edition_offer_soon_badge();
-    buy.appendChild(soon);
-  }
-  buy.addEventListener('click', () => { /* no-op stub */ });
-  root.appendChild(buy);
+  // Error span — shown by setError, hidden otherwise. Always present (active +
+  // comingSoon) so runPurchase can surface a message; harmless on inactive too.
+  const error = document.createElement('span');
+  error.className = 'booster-eo-error';
+  error.hidden = true;
+  root.appendChild(error);
 
-  return root;
+  return {
+    root,
+    setBusy(b: boolean): void {
+      if (!buy) return;
+      buy.disabled = b;
+      buy.classList.toggle('booster-eo-buy--busy', b);
+    },
+    setError(m: string | null): void {
+      if (m) { error.textContent = m; error.hidden = false; }
+      else { error.textContent = ''; error.hidden = true; }
+    },
+  };
 }

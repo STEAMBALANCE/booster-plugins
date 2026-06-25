@@ -2,6 +2,7 @@ import type { PluginContext } from '@steambalance/booster-framework';
 import { registerAddFundsPage } from './pages/addfunds';
 import { registerAppPage } from './pages/app';
 import { registerCartPage } from './pages/cart';
+import { createKeysClient } from './lib/keys-client';
 
 /**
  * Web-context plugin entry point. Installed by the plugin runner when
@@ -25,13 +26,19 @@ export async function installAddFundsWeb(ctx: PluginContext): Promise<() => void
   // future modules can subscribe to.
   await sb.lifecycle.ready();
 
+  // One keys client per install, shared by the App page (region keys block +
+  // edition-offer chips). Its bus subscriptions are scope-abort bound; dispose()
+  // in the teardown unwinds them eagerly for cleanliness.
+  const keysClient = createKeysClient(sb);
+
   registerAddFundsPage(sb);
-  registerAppPage(sb);
+  registerAppPage(sb, { keysClient });
   registerCartPage(sb);
   // Page lifecycle is owned by sb.pages.register internally; no manual cleanup needed
   // here (the plugin scope abort propagates to all page registrations).
   // Future: registerOtherStorePages(sb) here.
 
-  // No-op: pages/bus teardown is scope-abort bound (see JSDoc above).
-  return () => {};
+  // Pages/bus teardown is scope-abort bound (see JSDoc above); dispose the keys
+  // client explicitly so its subscriptions unwind even on a plain teardown call.
+  return () => { keysClient.dispose(); };
 }

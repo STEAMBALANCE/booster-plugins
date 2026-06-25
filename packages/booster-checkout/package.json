@@ -1,6 +1,6 @@
 {
   "name": "@booster-plugins/booster-checkout",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "private": true,
   "description": "SteamBalance Checkout plugin: popup with topup, payment, support, orders.",
   "type": "module",

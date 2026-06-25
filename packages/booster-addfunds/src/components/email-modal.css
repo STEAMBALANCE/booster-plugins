@@ -1,0 +1,95 @@
+#booster-email-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.booster-email-card {
+  background: #1b2838;
+  border-radius: 4px;
+  padding: 32px;
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  font-family: 'Motiva Sans', 'Nunito Sans', Arial, sans-serif;
+  color: #c6d4df;
+  box-sizing: border-box;
+}
+
+.booster-email-title {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.booster-email-hint {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #8f98a0;
+}
+
+.booster-email-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  background: #316282;
+  border: 1px solid #4d7695;
+  border-radius: 3px;
+  color: #c6d4df;
+  font-size: 14px;
+  outline: none;
+}
+
+.booster-email-input:focus {
+  border-color: #66c0f4;
+}
+
+.booster-email-error {
+  margin: 6px 0 0 0;
+  min-height: 1.25em;
+  font-size: 12px;
+  color: #e96767;
+}
+
+.booster-email-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.booster-email-cancel {
+  padding: 8px 18px;
+  background: transparent;
+  border: 1px solid #4d7695;
+  border-radius: 3px;
+  color: #c6d4df;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.booster-email-cancel:hover {
+  border-color: #66c0f4;
+  color: #fff;
+}
+
+.booster-email-confirm {
+  padding: 8px 18px;
+  background: #4c7b9e;
+  border: 0;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.booster-email-confirm:hover {
+  background: #5a8fb8;
+}

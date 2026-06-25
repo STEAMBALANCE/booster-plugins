@@ -1,6 +1,6 @@
 {
   "name": "@booster-plugins/booster-addfunds",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "private": true,
   "description": "SteamBalance AddFunds plugin: enhances Steam store /steamaccount/addfunds page.",
   "type": "module",

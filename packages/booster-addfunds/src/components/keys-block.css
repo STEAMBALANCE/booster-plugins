@@ -26,11 +26,30 @@
   box-sizing: border-box;
   display: flex; align-items: center;
 }
-#booster-keys-block .booster-keys-name {
-  font-weight: 700; font-size: 20px; line-height: 24px; color: #fff;
-  /* Keep the name clear of the chip overlapping the right side. */
+#booster-keys-block .booster-keys-head {
+  display: flex; align-items: center; gap: 12px;
+  /* Keep the name+region clear of the chip overlapping the right side. */
   padding-right: 280px;
 }
+#booster-keys-block .booster-keys-name {
+  font-weight: 700; font-size: 20px; line-height: 24px; color: #fff;
+}
+/* Region label chip (e.g. "Global") next to the game name. */
+#booster-keys-block .booster-keys-region {
+  flex: none; background: rgba(255, 255, 255, .14); color: #fff;
+  font-size: 12px; line-height: 16px; font-weight: 500;
+  border-radius: 3px; padding: 2px 8px; white-space: nowrap;
+}
+/* Inactive row: dimmed, "Скоро в продаже" instead of the buy cluster. */
+#booster-keys-block .booster-keys-row--inactive { opacity: .8; }
+#booster-keys-block .booster-keys-inactive-label {
+  color: #fff; opacity: .7; font-size: 12px; line-height: 16px; white-space: nowrap;
+}
+/* Purchase-result error surfaced by the row handle's setError. */
+#booster-keys-block .booster-keys-error {
+  color: #ff6b6b; font-size: 11px; line-height: 14px; max-width: 220px;
+}
+#booster-keys-block .booster-keys-error[hidden] { display: none; }
 #booster-keys-block .booster-keys-os {
   position: absolute; top: 14px; right: 24px;
   display: inline-flex; align-items: center; color: #fff;
@@ -64,6 +83,8 @@
   line-height: 16px;
 }
 #booster-keys-block .booster-keys-buy:hover { filter: brightness(1.08); }
+#booster-keys-block .booster-keys-buy:disabled { cursor: default; filter: none; opacity: .6; }
+#booster-keys-block .booster-keys-buy--busy { opacity: .6; }
 #booster-keys-block .booster-keys-buy-icon {
   display: inline-flex; align-items: center;
   width: 14px; height: 12px;

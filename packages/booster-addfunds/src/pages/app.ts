@@ -3,40 +3,40 @@
 // Store-context page handler for Steam product pages
 // (`store.steampowered.com/app/<id>`). Two branches, decided on mount:
 //
-//   - Region-locked page (detectRegionLock true) — Steam renders its
-//     generic "unavailable in your region" error template (#error_box,
-//     no product DOM). We fetch region keys for the app id and, if any
-//     exist, insert our branded keys block immediately after #error_box.
-//     No keys → leave the page untouched.
+//   - Region-locked page (detectRegionLock true) — Steam renders its generic
+//     "unavailable in your region" error template (#error_box, no product DOM).
+//     We request keys for the app id over the bus and, if any exist, insert our
+//     branded keys block immediately after #error_box. No keys → leave the page
+//     untouched.
 //
-//   - Normal app page — the TopupBar and the keys offer chip are mutually
-//     exclusive (driven by lib/coming-soon.ts::KEYS_COMING_SOON). LIVE: keys
-//     present → full edition-offer chip in the first purchase row, topup hidden;
-//     no keys → branded TopupBar at the top of the editions column
-//     (.leftcol.game_description_column). INTERIM (API pending): topup ALWAYS
-//     shown + a dimmed «Купить»-only chip with a «СКОРО» badge. Submitting the
-//     bar publishes `booster-addfunds.topup-requested` on the cross-target bus —
-//     booster-checkout's main-shell popup subscribes and pre-fills the amount.
+//   - Normal app page — request keys for the app id; each KeyItem that matches a
+//     native edition block (by subid) gets an edition-offer chip in that block's
+//     purchase row, and the topup bar is hidden (mutual exclusion). No match
+//     (empty result or unknown subids) → branded TopupBar at the top of the
+//     editions column (.leftcol.game_description_column) PLUS one dimmed «СКОРО»
+//     chip on the first edition block. Submitting the bar publishes
+//     `booster-addfunds.topup-requested` on the cross-target bus — booster-checkout's
+//     main-shell popup subscribes and pre-fills the amount.
 //
-// Cross-target user data (currency/balance) arrives over the bus as
-// `booster-checkout.user.snapshot` payloads, surfaced through the shared
-// user-snapshot service (BC doesn't cross to store.steampowered.com).
-// The bar renders immediately with empty placeholder/symbol; the snapshot
-// subscription patches them when a snapshot lands.
+// Keys data + purchases flow over sb.bus via createKeysClient (the wire fetch +
+// checkout window live in booster-checkout's main-shell). Cross-target user data
+// (currency/balance) arrives over the bus as `booster-checkout.user.snapshot`
+// payloads, surfaced through the shared user-snapshot service.
 //
-// Plain DOM by design (store BrowserView has no Svelte runtime); CSS is
-// scoped via #booster-topup-bar / #booster-keys-block so it can't leak onto Steam's
-// own layout.
+// Plain DOM by design (store BrowserView has no Svelte runtime); CSS is scoped
+// via #booster-topup-bar / #booster-keys-block / .booster-eo so it can't leak
+// onto Steam's own layout.
 
 import type { SbApi, PageContext } from '@steambalance/booster-framework/api-types';
 import { detectRegionLock } from '../lib/region-lock';
 import { parseAppId } from '../lib/app-id';
-import { readFirstEditionPrice, readFirstEditionPriceInfo } from '../lib/edition-price';
-import { getEditionOffer, type EditionOffer } from '../lib/edition-offer';
-import { buildEditionOfferChip, ensureEditionOfferStyles, type EditionOfferChipOptions } from '../components/edition-offer-chip';
-import { fetchRegionKeys as realFetchRegionKeys, type RegionKey } from '../lib/keys-api';
-import { KEYS_COMING_SOON } from '../lib/coming-soon';
+import { readFirstEditionPrice } from '../lib/edition-price';
+import { matchItemsToBlocks } from '../lib/edition-match';
+import { createKeysClient } from '../lib/keys-client';
+import type { KeyItem } from '../lib/keys-api';
+import { buildEditionOfferChip, ensureEditionOfferStyles } from '../components/edition-offer-chip';
 import { buildKeysBlock, ensureKeysStyles } from '../components/keys-block';
+import { openEmailModal as realOpenEmailModal } from '../components/email-modal';
 import { buildTopupBar, ensureTopupStyles } from '../components/topup-bar';
 import { ensureSnapshotService, type UserSnapshot } from '../lib/user-snapshot';
 import { currencySym, defaultAmountForCurrency } from '../lib/currency';
@@ -44,90 +44,70 @@ import { waitForElement } from '../lib/wait-for-element';
 import { LL } from '../i18n';
 
 // Build-time-inlined PNG logo (data:image/png;base64,…). Bypasses
-// store.steampowered.com's img-src CSP that would block our CDN URL.
-// Resolved via typeof guard so the bun `define` substitution can be
-// absent (e.g. when imported by a `bun test` run that loads source
-// directly). Empty-string fallback keeps tests deterministic.
+// store.steampowered.com's img-src CSP that would block our CDN URL. Resolved via
+// typeof guard so the bun `define` substitution can be absent (e.g. when imported
+// by a `bun test` run that loads source directly). Empty-string fallback keeps
+// tests deterministic.
 declare const __SB_ADDFUNDS_LOGO_DATA_URI__: string;
 const LOGO = typeof __SB_ADDFUNDS_LOGO_DATA_URI__ !== 'undefined' ? __SB_ADDFUNDS_LOGO_DATA_URI__ : '';
 
+// Both the chip and the keys-block row expose this handle so runPurchase can drive
+// either presentation uniformly.
+interface PurchaseHandle {
+  setBusy(b: boolean): void;
+  setError(m: string | null): void;
+}
+
+interface KeysClient {
+  requestKeys(appid: number, signal: AbortSignal): Promise<KeyItem[]>;
+  purchaseKey(itemId: number, email?: string): Promise<{ status: 'ok' | 'email-required' | 'error'; error?: string }>;
+  dispose(): void;
+}
+
 interface AppPageDeps {
-  fetchRegionKeys?: (appId: number, signal: AbortSignal) => Promise<RegionKey[]>;
-  /** INTERIM override (default `KEYS_COMING_SOON`). true → «Купить»-only chip with
-   *  a «СКОРО» badge + topup always visible; false → live mutual exclusion (keys
-   *  present → full chip, topup hidden; no keys → topup fallback). */
-  comingSoon?: boolean;
-  /** LIVE-mode keys lookup seam. Resolves our edition offer for the page, or null
-   *  when the app has no keys (→ topup fallback). Defaults to the DOM-price-derived
-   *  resolver; tests inject a deterministic value to exercise both live branches. */
-  resolveEditionOffer?: (sb: SbApi, ctx: PageContext, buyArea: HTMLElement) => Promise<EditionOffer | null>;
-}
-
-// First edition block on the page (the one carrying a final price). Shared by the
-// keys lookup and the chip mount so both target the same native row.
-function firstEditionBlock(buyArea: HTMLElement): HTMLElement | undefined {
-  return [...buyArea.querySelectorAll('.game_area_purchase_game')]
-    .find((b) => b.querySelector('[data-price-final]')) as HTMLElement | undefined;
-}
-
-// Default LIVE resolver: derive our offer from the first edition's on-page Steam
-// price. Returns null when there's no eligible block / price / offer (= "no keys")
-// — the caller turns null into a topup fallback. When the real keys endpoint lands,
-// swap getEditionOffer's body for the API; null MUST mean "no keys for this app".
-async function resolveEditionOfferDefault(
-  sb: SbApi, ctx: PageContext, buyArea: HTMLElement,
-): Promise<EditionOffer | null> {
-  void sb;
-  if (!firstEditionBlock(buyArea)) return null;
-  const appId = parseAppId(ctx.url.toString());
-  if (appId == null) return null;
-  const info = readFirstEditionPriceInfo(document);
-  if (!info) return null;
-  return getEditionOffer(appId, info.amount, info.currencySymbol, ctx.signal);
-}
-
-// Interim placeholder offer for the «Купить»-only chip: discount + price are hidden
-// by the chip options, so these numbers are never displayed.
-const PLACEHOLDER_OFFER: EditionOffer = { ourPrice: 0, steamPrice: 0, discountPercent: 0, currencySymbol: '' };
-
-// Mount the edition offer chip into the first edition's native action row (flex
-// host so our chip pins right). Idempotent (re-mount safe via the
-// booster-dist-host / #booster-edition-offer guards). Returns a teardown, or void
-// when there's no eligible action / it's already hosted. Synchronous: the keys
-// lookup is done by the caller, so there's no post-await race here.
-function mountEditionChip(
-  buyArea: HTMLElement, offer: EditionOffer, opts: EditionOfferChipOptions,
-): (() => void) | void {
-  const block = firstEditionBlock(buyArea);
-  if (!block) return;
-  const action = block.querySelector('.game_purchase_action') as HTMLElement | null;
-  if (!action) return;
-  if (action.classList.contains('booster-dist-host') || action.querySelector('#booster-edition-offer')) return;
-  ensureEditionOfferStyles();
-  action.classList.add('booster-dist-host');
-  const chip = buildEditionOfferChip(offer, opts);
-  action.appendChild(chip);
-  return () => {
-    try { action.classList.remove('booster-dist-host'); chip.remove(); } catch { /* detached */ }
-    document.getElementById('booster-edition-offer-style')?.remove();
-  };
+  /** Keys transport seam. Default: the real bus client `createKeysClient(sb)`. */
+  keysClient?: KeysClient;
+  /** Email-entry modal seam. Default: the real `openEmailModal`. */
+  openEmailModal?: () => Promise<string | null>;
 }
 
 export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
-  const fetchRegionKeys = deps.fetchRegionKeys ?? realFetchRegionKeys;
-  const comingSoon = deps.comingSoon ?? KEYS_COMING_SOON;
-  const resolveEditionOffer = deps.resolveEditionOffer ?? resolveEditionOfferDefault;
+  const keysClient = deps.keysClient ?? createKeysClient(sb);
+  const openEmailModal = deps.openEmailModal ?? realOpenEmailModal;
   const snap = ensureSnapshotService(sb);
+
+  // Drive a key purchase from either the chip or a keys-block row. The handle's
+  // busy/error state lives on the originating control. setBusy(false) BEFORE the
+  // modal await (per spec) so the loader isn't spinning while the user types; it
+  // re-arms only after a valid email is entered.
+  async function runPurchase(item: KeyItem, handle: PurchaseHandle): Promise<void> {
+    handle.setError(null);
+    handle.setBusy(true);
+    let r = await keysClient.purchaseKey(item.itemId);
+    if (r.status === 'email-required') {
+      handle.setBusy(false);
+      const email = await openEmailModal();
+      if (!email) return;            // cancel → nothing sent, loader already off
+      handle.setBusy(true);
+      r = await keysClient.purchaseKey(item.itemId, email);
+    }
+    handle.setBusy(false);
+    if (r.status === 'error') handle.setError(LL.addfunds.keys_purchase_error());
+    // r.status === 'ok' → checkout already opened the payment window
+  }
 
   async function mountRegion(ctx: PageContext): Promise<(() => void) | void> {
     const errBox = await waitForElement<HTMLElement>('#error_box', ctx.signal);
     if (!errBox || ctx.signal.aborted) return;
     const appId = parseAppId(ctx.url.toString());
     if (appId == null) return;
-    const keys = await fetchRegionKeys(appId, ctx.signal);
-    if (ctx.signal.aborted || keys.length === 0) return;
+    const items = await keysClient.requestKeys(appId, ctx.signal);
+    if (ctx.signal.aborted || items.length === 0) return;
     ensureKeysStyles();
-    const block = buildKeysBlock(keys, { logoUrl: LOGO });
+    const block = buildKeysBlock(items, {
+      onBuy: (item, row) => { void runPurchase(item, row); },
+      logoUrl: LOGO,
+    });
     errBox.parentElement?.insertBefore(block, errBox.nextSibling);
     return () => {
       try { block.remove(); } catch { /* detached */ }
@@ -136,18 +116,20 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
   }
 
   async function mountNormal(ctx: PageContext): Promise<(() => void) | void> {
-    // Anchor on the purchase/editions block (#game_area_purchase) and place the
-    // bar at the very TOP of its column (.leftcol.game_description_column) — the
-    // same flow that holds the "Издания"/"Купить" blocks — as a separate element
-    // above them, not nested in the Steam queue-actions panel.
+    // Anchor on the purchase/editions block (#game_area_purchase); the topup bar
+    // lands at the very TOP of its column (.leftcol.game_description_column).
     const buyArea = await waitForElement<HTMLElement>('#game_area_purchase', ctx.signal);
     if (!buyArea || ctx.signal.aborted) return;
     const col = buyArea.parentElement;
     if (!col) return;
 
+    const appId = parseAppId(ctx.url.toString());
+    const items = appId != null ? await keysClient.requestKeys(appId, ctx.signal) : [];
+    if (ctx.signal.aborted) return;
+
     const teardowns: Array<() => void> = [];
 
-    // Topup bar ("Пополнить"). Inserted as the first element of the editions
+    // Topup bar ("Пополнить"), inserted as the first element of the editions
     // column. Idempotent: a second mount on the same DOM is a no-op.
     const mountTopupBar = (): void => {
       if (document.getElementById('booster-topup-bar')) return;
@@ -159,18 +141,16 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
         logoUrl: LOGO,
         onSubmit: (amount) => { sb.bus.publish('booster-addfunds.topup-requested', { amount }); },
       });
-      // No top margin: the bar is the first element of the left column, so it
-      // must align with the top of the right column (the base #booster-topup-bar rule
-      // carries a 16px top margin for the addfunds page — zero it out here).
+      // No top margin: the bar is the first element of the left column, so it must
+      // align with the top of the right column.
       bar.root.style.marginTop = '0';
       const apply = (s: UserSnapshot): void => {
         const def = defaultAmountForCurrency(s.currency);
         bar.setCurrency(currencySym(s.currency), def > 0 ? String(def) : '');
       };
       const unsub = snap.subscribe(apply); // fires immediately if cache exists
-      // Prefill with the first edition's price when we can read it; otherwise the
-      // bar stays empty with its currency placeholder. `apply` only touches the
-      // symbol/placeholder (never input.value), so this prefill survives later
+      // Prefill with the first edition's price when readable; `apply` only touches
+      // the symbol/placeholder (never input.value) so this prefill survives later
       // snapshot updates.
       const editionPrice = readFirstEditionPrice(document);
       if (editionPrice != null) bar.setAmount(editionPrice);
@@ -183,26 +163,46 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
       });
     };
 
-    if (comingSoon) {
-      // INTERIM (keys API pending): the topup bar is ALWAYS shown, and the offer
-      // is reduced to a dimmed «Купить» button with a «СКОРО» badge — no keys
-      // lookup, no discount/price. Flip KEYS_COMING_SOON (lib/coming-soon.ts) to
-      // drop this branch.
-      mountTopupBar();
-      const t = mountEditionChip(buyArea, PLACEHOLDER_OFFER, { showDiscount: false, showPrice: false, comingSoon: true });
-      if (t) teardowns.push(t);
+    // Mount the edition offer chip for a matched KeyItem into its block's native
+    // action row (flex host so our chip pins right). Idempotent via the
+    // booster-dist-host guard. The shared stylesheet is reference-counted on
+    // teardown so one chip's removal never strips styles from sibling chips.
+    const mountChip = (block: HTMLElement, item: KeyItem): void => {
+      const action = block.querySelector('.game_purchase_action') as HTMLElement | null;
+      if (!action || action.classList.contains('booster-dist-host')) return;
+      ensureEditionOfferStyles();
+      action.classList.add('booster-dist-host');
+      if (item.packageId != null) action.dataset.sbKeysSubid = String(item.packageId);
+      const chip = buildEditionOfferChip({ item, onBuy: () => void runPurchase(item, chip) });
+      action.appendChild(chip.root);
+      teardowns.push(() => {
+        try { chip.root.remove(); action.classList.remove('booster-dist-host'); delete action.dataset.sbKeysSubid; } catch { /* detached */ }
+        if (document.querySelectorAll('.booster-eo').length === 0) document.getElementById('booster-edition-offer-style')?.remove();
+      });
+    };
+
+    // Empty-state «СКОРО» chip — same host wiring as mountChip but a dimmed no-op
+    // button. Also a `.booster-eo`, so the refcounted style teardown covers it.
+    const mountComingSoonChip = (block: HTMLElement): void => {
+      const action = block.querySelector('.game_purchase_action') as HTMLElement | null;
+      if (!action || action.classList.contains('booster-dist-host')) return;
+      ensureEditionOfferStyles();
+      action.classList.add('booster-dist-host');
+      const chip = buildEditionOfferChip({ comingSoon: true });
+      action.appendChild(chip.root);
+      teardowns.push(() => {
+        try { chip.root.remove(); action.classList.remove('booster-dist-host'); } catch { /* detached */ }
+        if (document.querySelectorAll('.booster-eo').length === 0) document.getElementById('booster-edition-offer-style')?.remove();
+      });
+    };
+
+    const blocks = [...buyArea.querySelectorAll('.game_area_purchase_game')] as HTMLElement[];
+    const pairs = matchItemsToBlocks(items, blocks);
+    if (pairs.length > 0) {
+      for (const { block, item } of pairs) mountChip(block, item);
     } else {
-      // LIVE: the topup bar and the keys offer are mutually exclusive. Keys
-      // present (offer != null) → show the full chip, hide the topup. No keys →
-      // topup fallback.
-      const offer = await resolveEditionOffer(sb, ctx, buyArea);
-      if (ctx.signal.aborted) return;
-      if (offer) {
-        const t = mountEditionChip(buyArea, offer, { showDiscount: true, showPrice: true });
-        if (t) teardowns.push(t);
-      } else {
-        mountTopupBar();
-      }
+      mountTopupBar();
+      if (blocks[0]) mountComingSoonChip(blocks[0]);
     }
 
     if (teardowns.length === 0) return;

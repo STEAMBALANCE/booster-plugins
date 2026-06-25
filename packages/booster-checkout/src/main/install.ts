@@ -18,6 +18,7 @@ import { readSupportEnvInfo } from './env-info';
 import { wireOrdersEmbed } from './orders-embed';
 import { isDocKey, DOC_WINDOW_DIMS, docWindowContent, type DocKey } from './doc-windows';
 import { LL } from '../i18n';
+import { installKeysBridge } from './keys-install';
 
 declare const __SB_POPUP_HTML__: string;
 // Inline SVG (15×12 "S6" mark) for the Steam-toolbar header pill. Wide
@@ -31,6 +32,7 @@ declare const __SB_HEADER_ICON_SVG__: string;
 const POPUP_DROPDOWN = 'sb_topup';
 const WINDOW_SUPPORT = 'sb_support';
 const WINDOW_PAYMENT = 'sb_topup_payment';
+const WINDOW_KEYS_PAYMENT = 'sb_keys_payment';
 const WINDOW_ORDERS  = 'sb_orders';
 const WINDOW_FAQ     = 'sb_faq';
 const WINDOW_TERMS   = 'sb_terms';
@@ -238,6 +240,36 @@ export async function installMain(ctx: PluginContext): Promise<() => void> {
     publishUserSnapshot();
   });
   cleanups.push(unsubSnapshotReq);
+
+  // ── booster-addfunds.keys.* bridge ───────────────────────────────────────
+  // Wired before the popup await for the same reason the topup and snapshot
+  // subscribers are: a keys.request publish landing during boot must not be
+  // lost. openKeysPayment is defined below (after paymentHandle vars) and
+  // referenced by closure — hoisting the cleanups.push here is safe because
+  // installKeysBridge only calls openKeysPayment asynchronously (event-driven).
+  let keysPaymentHandle: OpenExternalWindowHandle | null = null;
+  let keysPaymentInFlight = false;
+  async function openKeysPayment(url: string): Promise<boolean> {
+    if (keysPaymentHandle) {
+      try { keysPaymentHandle.setUrl(url); return true; } catch (e) { console.error('[booster-checkout] keys setUrl failed:', e); return false; }
+    }
+    if (keysPaymentInFlight) return false;
+    keysPaymentInFlight = true;
+    try {
+      const login = sb.steam.getCurrentUser()?.accountName;
+      const handle = await sb.ui.openExternalWindow({
+        id: WINDOW_KEYS_PAYMENT,
+        url,
+        title: login ? LL.checkout.popup.window_title({ login }) : LL.checkout.popup.window_title_no_login(),
+        taskbarTitle: LL.checkout.popup.window_title_no_login(),
+      });
+      keysPaymentHandle = handle;
+      handle.on('close', () => { keysPaymentHandle = null; });
+      return true;
+    } catch (e) { console.error('[booster-checkout] keys openExternalWindow failed:', e); return false; }
+    finally { keysPaymentInFlight = false; }
+  }
+  cleanups.push(installKeysBridge(sb, { openPayment: openKeysPayment }));
 
   // Pre-allocate the native dropdown popup once. Show / hide / toggle on it
   // are fire-and-forget BC posts — relay drives the same SteamClient.Window
