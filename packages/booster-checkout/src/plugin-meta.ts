@@ -9,5 +9,5 @@ export const pluginMeta: PluginMeta = {
   apiVersion: 1,
   contextKinds: ['main'],
   urlPatterns: [],
-  grantedCapabilities: ['ui', 'steam', 'configs', 'bus'],
+  grantedCapabilities: ['ui', 'steam', 'configs', 'bus', 'keys'],
 };

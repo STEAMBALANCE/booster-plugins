@@ -16,6 +16,7 @@ import { buildOrdersUrl, buildSupportUrl } from './urls-helper';
 import { appendOrderUid, sanitizeStoredUids, isValidUid } from './order-uids';
 import { readSupportEnvInfo } from './env-info';
 import { wireOrdersEmbed } from './orders-embed';
+import { wireOrdersKeyActivation } from './orders-keys';
 import { isDocKey, DOC_WINDOW_DIMS, docWindowContent, type DocKey } from './doc-windows';
 import { LL } from '../i18n';
 import { installKeysBridge, type KeysWindowTitles } from './keys-install';
@@ -436,8 +437,11 @@ export async function installMain(ctx: PluginContext): Promise<() => void> {
           width: 720, height: 640, minWidth: 560, minHeight: 420,
         });
         ordersHandle = handle;
-        handle.on('close', () => { ordersHandle = null; });
         wireOrdersEmbed(handle, { source: 'booster-checkout' });
+        const unwireKeys = wireOrdersKeyActivation(handle, {
+          activate: (k) => sb.keys.activate(k),
+        });
+        handle.on('close', () => { ordersHandle = null; unwireKeys(); });
         popup.hide();
       } catch (e) {
         console.error('[booster-checkout] openWindow orders failed:', e);

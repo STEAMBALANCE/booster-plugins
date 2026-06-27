@@ -21,6 +21,7 @@ sb.plugins.register({
     Capability.Steam,
     Capability.Configs,
     Capability.Bus,
+    Capability.Keys,
   ],
   async init(ctx: PluginContext): Promise<() => void> {
     if (ctx.contextKind !== ContextKind.Main) return () => {};
