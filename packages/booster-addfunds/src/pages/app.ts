@@ -31,7 +31,7 @@ import type { SbApi, PageContext } from '@steambalance/booster-framework/api-typ
 import { detectRegionLock } from '../lib/region-lock';
 import { parseAppId } from '../lib/app-id';
 import { readFirstEditionPrice } from '../lib/edition-price';
-import { matchItemsToBlocks } from '../lib/edition-match';
+import { matchItemsToBlocks, isPurchasableBlock } from '../lib/edition-match';
 import { createKeysClient } from '../lib/keys-client';
 import type { KeyItem } from '../lib/keys-api';
 import { buildEditionOfferChip, ensureEditionOfferStyles } from '../components/edition-offer-chip';
@@ -219,7 +219,11 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
       for (const { block, item } of pairs) mountChip(block, item);
     } else {
       mountTopupBar();
-      if (blocks[0]) mountComingSoonChip(blocks[0]);
+      // «СКОРО» goes on the first real PAID edition — skip the free demo
+      // download row (and any free/install block) so the chip never lands on a
+      // "Загрузить" block. No purchasable block → no chip (bar still shows).
+      const soonTarget = blocks.find(isPurchasableBlock);
+      if (soonTarget) mountComingSoonChip(soonTarget);
     }
 
     if (teardowns.length === 0) return;

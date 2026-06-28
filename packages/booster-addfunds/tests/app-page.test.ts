@@ -298,6 +298,59 @@ describe('registerAppPage', () => {
     expect(chip.querySelector('.booster-eo-soon')!.textContent).toBe('СКОРО');
   });
 
+  // Demo download block (Steam's `demo_above_purchase`, no subid, no price) sits
+  // ABOVE the paid edition. The «СКОРО» fallback chip must skip it and land on
+  // the priced edition — never on the demo's "Загрузить" row.
+  const demoThenEditionBody = `
+    <div class="leftcol game_description_column">
+      <div id="game_area_purchase" class="game_area_purchase">
+        <div class="game_area_purchase_game demo_above_purchase">
+          <div class="game_purchase_action"><div class="game_purchase_action_bg">
+            <a class="btn_green_steamui btn_medium" href="steam://install/3044590"><span>Загрузить</span></a>
+          </div></div>
+        </div>
+        <div class="game_area_purchase_game">
+          <div class="game_purchase_action"><div class="game_purchase_action_bg">
+            <div class="game_purchase_price price" data-price-final="20200">202 руб.</div>
+          </div></div>
+        </div>
+      </div>
+    </div>`;
+
+  test('normal page, demo block + paid edition, no match → «СКОРО» chip lands on the paid edition, not the demo', async () => {
+    const { sb, pageReg } = makeSbStub();
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [item({ packageId: 99999 })] }) });
+    setBody(demoThenEditionBody);
+    await reg(pageReg).mount(mountCtx());
+    await tick();
+    const chips = document.querySelectorAll('.booster-eo');
+    expect(chips.length).toBe(1);
+    const demoAction = document.querySelector('.demo_above_purchase .game_purchase_action')!;
+    const paidAction = document.querySelectorAll('.game_area_purchase_game')[1]!.querySelector('.game_purchase_action')!;
+    expect(demoAction.querySelector('.booster-eo')).toBeNull();
+    expect(demoAction.classList.contains('booster-dist-host')).toBe(false);
+    expect(paidAction.querySelector('.booster-eo')).not.toBeNull();
+  });
+
+  test('normal page, ONLY a demo block, no match → topup bar but no «СКОРО» chip', async () => {
+    const { sb, pageReg } = makeSbStub();
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [item({ packageId: 99999 })] }) });
+    setBody(`
+      <div class="leftcol game_description_column">
+        <div id="game_area_purchase" class="game_area_purchase">
+          <div class="game_area_purchase_game demo_above_purchase">
+            <div class="game_purchase_action"><div class="game_purchase_action_bg">
+              <a class="btn_green_steamui btn_medium" href="steam://install/3044590"><span>Загрузить</span></a>
+            </div></div>
+          </div>
+        </div>
+      </div>`);
+    await reg(pageReg).mount(mountCtx());
+    await tick();
+    expect(document.getElementById('booster-topup-bar')).not.toBeNull();
+    expect(document.querySelector('.booster-eo')).toBeNull();
+  });
+
   test('purchase needs email → openEmailModal invoked, 2nd purchaseKey carries the email', async () => {
     const { sb, pageReg } = makeSbStub();
     const keysClient = makeKeysClient({

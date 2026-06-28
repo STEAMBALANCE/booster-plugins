@@ -1,25 +1,31 @@
 import { parseAmount } from './amount';
 
-// Read the FIRST edition's price from the Steam purchase area
-// (#game_area_purchase) on a game page. Prefers the canonical integer
+// Read the final price (whole wallet-currency units, rounded) from a purchase
+// scope — either the whole `#game_area_purchase` area or a single
+// `.game_area_purchase_game` block. Prefers the canonical integer
 // `data-price-final` attribute (wallet minor units, ×100 — e.g. "760000" =
 // 7600.00₸), which needs no locale parsing; falls back to parsing the displayed
-// price text. Returns whole wallet-currency units (rounded), or null when no
-// usable price is found (free game, no purchase block, unparseable text) — the
-// caller then leaves the bar empty with its placeholder.
-export function readFirstEditionPrice(doc: Document): number | null {
-  const gap = doc.querySelector('#game_area_purchase');
-  if (!gap) return null;
-
-  const raw = gap.querySelector('[data-price-final]')?.getAttribute('data-price-final');
-  if (raw) {
+// price text. Returns null when no usable price is found (free/demo block,
+// unparseable text). Shared by the topup-bar prefill (#game_area_purchase) and
+// the «СКОРО» block filter (per-block) so the price selectors live in one place.
+export function readBlockPrice(scope: Element): number | null {
+  const raw = scope.querySelector('[data-price-final]')?.getAttribute('data-price-final');
+  if (raw != null) {
     const minor = parseInt(raw, 10);
     if (Number.isFinite(minor) && minor > 0) return Math.round(minor / 100);
   }
-
-  const priceEl = gap.querySelector('.discount_final_price, .game_purchase_price.price, .game_purchase_price');
+  const priceEl = scope.querySelector('.discount_final_price, .game_purchase_price.price, .game_purchase_price');
   const v = priceEl ? parseAmount(priceEl.textContent ?? '') : null;
   return v != null && v > 0 ? Math.round(v) : null;
+}
+
+// Read the FIRST edition's price from the Steam purchase area
+// (#game_area_purchase) on a game page. Returns whole wallet-currency units, or
+// null when no usable price is found — the caller then leaves the bar empty with
+// its placeholder.
+export function readFirstEditionPrice(doc: Document): number | null {
+  const gap = doc.querySelector('#game_area_purchase');
+  return gap ? readBlockPrice(gap) : null;
 }
 
 export interface EditionPriceInfo { amount: number; currencySymbol: string; }

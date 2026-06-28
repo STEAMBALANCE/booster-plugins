@@ -1,4 +1,17 @@
 import type { KeyItem } from './keys-api';
+import { readBlockPrice } from './edition-price';
+
+// A real, paid edition/bundle block — the only kind we attach our «СКОРО»
+// fallback chip to. Steam reuses `.game_area_purchase_game` for the free demo
+// download row ("Загрузить … Demo", tagged `demo_above_purchase`, no subid, no
+// price) and for free-to-play / "В библиотеку" rows; none of those should carry
+// our chip. Signal: a positive final price in the block (shared reader). Demo /
+// free / install rows have none, so they fall out.
+export function isPurchasableBlock(block: HTMLElement): boolean {
+  if (block.classList.contains('demo_above_purchase')) return false;
+  const price = readBlockPrice(block);
+  return price != null && price > 0;
+}
 
 export function readBlockSubid(block: HTMLElement): number | null {
   const input = block.querySelector('input[name="subid"]') as HTMLInputElement | null;

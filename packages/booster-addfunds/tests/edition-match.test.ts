@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { Window } from 'happy-dom';
-import { readBlockSubid, matchItemsToBlocks } from '../src/lib/edition-match';
+import { readBlockSubid, matchItemsToBlocks, isPurchasableBlock } from '../src/lib/edition-match';
 import type { KeyItem } from '../src/lib/keys-api';
 
 let w: Window;
@@ -37,6 +37,32 @@ test('readBlockSubid none → null', () => {
   const d = w.document.createElement('div'); d.innerHTML = '<a>bundle/20336</a>';
   expect(readBlockSubid(d as any)).toBeNull();
 });
+// el helper: build a purchase block with the given class + inner HTML.
+const block = (cls: string, html: string): HTMLElement => {
+  const d = w.document.createElement('div'); d.className = cls; d.innerHTML = html; return d as any;
+};
+
+test('isPurchasableBlock: paid edition (data-price-final > 0) → true', () => {
+  expect(isPurchasableBlock(block('game_area_purchase_game', '<div class="game_purchase_price price" data-price-final="20200">202 руб.</div>'))).toBe(true);
+});
+test('isPurchasableBlock: demo download block (demo_above_purchase) → false', () => {
+  expect(isPurchasableBlock(block('game_area_purchase_game demo_above_purchase', '<a class="btn_green_steamui" href="steam://install/3044590">Загрузить</a>'))).toBe(false);
+});
+test('isPurchasableBlock: demo class wins even if the block carries a price → false', () => {
+  // The class early-return must take precedence over any price the demo row
+  // might render — otherwise the chip could still land on a priced demo block.
+  expect(isPurchasableBlock(block('game_area_purchase_game demo_above_purchase', '<div class="game_purchase_price price" data-price-final="20200">202 руб.</div>'))).toBe(false);
+});
+test('isPurchasableBlock: free / play block (no price) → false', () => {
+  expect(isPurchasableBlock(block('game_area_purchase_game', '<a class="btn_green_steamui">Играть</a>'))).toBe(false);
+});
+test('isPurchasableBlock: data-price-final="0" (free) → false', () => {
+  expect(isPurchasableBlock(block('game_area_purchase_game', '<div class="game_purchase_price price" data-price-final="0">Бесплатно</div>'))).toBe(false);
+});
+test('isPurchasableBlock: price text only, no data-price-final → true', () => {
+  expect(isPurchasableBlock(block('game_area_purchase_game', '<div class="game_purchase_price price">202 руб.</div>'))).toBe(true);
+});
+
 test('matchItemsToBlocks pairs by packageId', () => {
   const a = w.document.createElement('div'); a.innerHTML = '<input name="subid" value="13533">';
   const b = w.document.createElement('div'); b.innerHTML = '<input name="subid" value="13535">';
