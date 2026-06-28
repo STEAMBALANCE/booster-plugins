@@ -1,5 +1,20 @@
 import { describe, test, expect } from 'bun:test';
 import { installKeysBridge } from '../src/main/keys-install';
+import { appendOrderUid } from '../src/main/order-uids';
+
+// Method-aware fake for the purchase flow: GET → payment methods, POST → order
+// with the next scripted uid. Lets a single bridge handle N back-to-back
+// purchases without fighting the localStorage paymentId cache.
+function purchaseFetch(orderUids: Array<string | undefined>) {
+  let post = 0;
+  return (async (_url: string, init?: { method?: string }) => {
+    if ((init?.method ?? 'GET') === 'POST') {
+      const uid = orderUids[Math.min(post++, orderUids.length - 1)];
+      return { ok: true, status: 200, json: async () => ({ success: true, data: { redirectUrl: 'https://pay/x', ...(uid !== undefined ? { uid } : {}) } }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ success: true, data: [{ value: 'p', can_pay_services: true, disabled: false }] }) };
+  }) as any;
+}
 
 function makeBus() {
   const subs = new Map<string, Set<(d: unknown) => void>>();
@@ -64,6 +79,74 @@ describe('installKeysBridge', () => {
     expect(openedUrl).toBe('https://pay/x');
     const res = bus.published.find((p) => p.topic === 'booster-checkout.keys.purchase-result');
     expect((res!.data as any)).toMatchObject({ reqId: 'p1', ok: true });
+  });
+
+  test('successful order persists its uid via onOrderUid before opening payment', async () => {
+    const bus = makeBus();
+    const payments = { success: true, data: [{ value: 'p', can_pay_services: true, disabled: false }] };
+    const order = { success: true, data: { redirectUrl: 'https://pay/x', uid: 'a5273b1e-87b4-435f-95ed-e85995b8951d' } };
+    let call = 0;
+    const fetchImpl = (async () => ({ ok: true, status: 200, json: async () => (call++ === 0 ? payments : order) })) as any;
+    const events: string[] = [];
+    let persistedUid: string | undefined;
+    installKeysBridge(makeSb(bus, { email: 'a@b.c' }), {
+      openPayment: async () => { events.push('open'); return true; },
+      onOrderUid: (uid) => { events.push('persist'); persistedUid = uid; },
+      fetchImpl,
+    });
+    bus.publish('booster-addfunds.keys.purchase', { reqId: 'p1', itemId: 7 });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(persistedUid).toBe('a5273b1e-87b4-435f-95ed-e85995b8951d');
+    expect(events).toEqual(['persist', 'open']); // order recorded even if the window never opens
+  });
+
+  test('failed order does not persist a uid', async () => {
+    const bus = makeBus();
+    const payments = { success: true, data: [{ value: 'p', can_pay_services: true, disabled: false }] };
+    const order = { success: false, message: 'Платёжный метод недоступен' };
+    let call = 0;
+    const fetchImpl = (async () => ({ ok: true, status: 200, json: async () => (call++ === 0 ? payments : order) })) as any;
+    let persisted = false;
+    installKeysBridge(makeSb(bus, { email: 'a@b.c' }), {
+      openPayment: async () => true,
+      onOrderUid: () => { persisted = true; },
+      fetchImpl,
+    });
+    bus.publish('booster-addfunds.keys.purchase', { reqId: 'p1', itemId: 7 });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(persisted).toBe(false);
+  });
+
+  test('a garbage backend uid is rejected by the real persist sink', async () => {
+    const bus = makeBus();
+    // onOrderUid wired to the SAME validator/cap the production sink uses, so this
+    // exercises the real isValidUid gate end-to-end through the keys path.
+    let store: string[] = [];
+    installKeysBridge(makeSb(bus, { email: 'a@b.c' }), {
+      openPayment: async () => true,
+      onOrderUid: (uid) => { store = appendOrderUid(store, uid); },
+      fetchImpl: purchaseFetch(["'; DROP TABLE orders;--"]),
+    });
+    bus.publish('booster-addfunds.keys.purchase', { reqId: 'p1', itemId: 7 });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(store).toEqual([]);
+  });
+
+  test('two back-to-back purchases each persist their own uid', async () => {
+    const bus = makeBus();
+    const u1 = 'a5273b1e-87b4-435f-95ed-e85995b8951d';
+    const u2 = 'b1112233-4455-6677-8899-aabbccddeeff';
+    let store: string[] = [];
+    installKeysBridge(makeSb(bus, { email: 'a@b.c' }), {
+      openPayment: async () => true,
+      onOrderUid: (uid) => { store = appendOrderUid(store, uid); },
+      fetchImpl: purchaseFetch([u1, u2]),
+    });
+    bus.publish('booster-addfunds.keys.purchase', { reqId: 'p1', itemId: 7 });
+    await new Promise((r) => setTimeout(r, 5));
+    bus.publish('booster-addfunds.keys.purchase', { reqId: 'p2', itemId: 8 });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(store).toEqual([u1, u2]);
   });
 
   test('order failure forwards the server human message in purchase-result', async () => {

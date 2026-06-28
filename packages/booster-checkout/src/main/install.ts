@@ -53,7 +53,7 @@ const POPUP_H = 248;
 export async function installMain(ctx: PluginContext): Promise<() => void> {
   const sb = ctx.sb;
 
-  // Local order-uid history for «Мои Заказы» (last 20, FIFO).
+  // Local order-uid history for «Мои заказы» (last 20, FIFO).
   // Source of truth: plugin-config 'order_uids'; in-memory copy kept in
   // sync so the orders-handler can build the URL without awaiting.
   const ORDER_UIDS_KEY = 'order_uids';
@@ -276,7 +276,10 @@ export async function installMain(ctx: PluginContext): Promise<() => void> {
     } catch (e) { console.error('[booster-checkout] keys openExternalWindow failed:', e); return false; }
     finally { keysPaymentInFlight = false; }
   }
-  cleanups.push(installKeysBridge(sb, { openPayment: openKeysPayment }));
+  cleanups.push(installKeysBridge(sb, {
+    openPayment: openKeysPayment,
+    onOrderUid: (uid) => { void persistOrderUid(uid); },
+  }));
 
   // Pre-allocate the native dropdown popup once. Show / hide / toggle on it
   // are fire-and-forget BC posts — relay drives the same SteamClient.Window

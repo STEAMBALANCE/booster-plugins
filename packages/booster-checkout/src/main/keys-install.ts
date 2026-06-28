@@ -12,6 +12,11 @@ export interface KeysWindowTitles {
 
 export interface KeysBridgeDeps {
   openPayment: (url: string, titles?: KeysWindowTitles) => Promise<boolean>;
+  // Persist the placed order's uid for «Мои заказы». Fired once the backend has
+  // created the order (uid present), BEFORE the payment window opens — the order
+  // exists regardless of whether the user completes payment, same as the balance
+  // top-up flow. Validation/capping lives in the persist sink (install.ts).
+  onOrderUid?: (uid: string) => void;
   fetchImpl?: typeof fetch;
 }
 
@@ -70,6 +75,7 @@ export function installKeysBridge(sb: SbApi, deps: KeysBridgeDeps): () => void {
       if (!paymentId) { sb.bus.publish('booster-checkout.keys.purchase-result', { reqId, ok: false, error: 'no-payment' }); return; }
       const res = await postKeysOrder(sb, { paymentId, itemId, account }, fetchImpl);
       if (!res.ok || !res.redirectUrl) { sb.bus.publish('booster-checkout.keys.purchase-result', { reqId, ok: false, error: res.error, message: res.message }); return; }
+      if (res.uid) deps.onOrderUid?.(res.uid);
       const opened = await deps.openPayment(res.redirectUrl, titles);
       sb.bus.publish('booster-checkout.keys.purchase-result', { reqId, ok: opened, error: opened ? undefined : 'window' });
     })();
