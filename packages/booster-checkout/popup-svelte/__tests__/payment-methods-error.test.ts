@@ -6,6 +6,7 @@
 
 import { test, expect, afterEach } from 'bun:test';
 import { renderPopup, closeAllPopups } from '../../tests/popup-render-helper';
+import { URLS } from '../../src/urls';
 
 afterEach(() => { closeAllPopups(); });
 
@@ -13,8 +14,8 @@ async function seedInit(h: Awaited<ReturnType<typeof renderPopup>>): Promise<voi
   h.postFromMain({ kind: 'init', login: 'u',
                    currency: 'RUB', balance: 0,
                    urls: { support: '', popupLogoLink: '',
-                           balanceCalcApi: 'https://test.local/api/balance/calc',
-                           balanceAddApi:  'https://test.local/api/balance/add' } });
+                           balanceCalcApi: URLS.balanceCalcApi,
+                           balanceAddApi:  URLS.balanceAddApi } });
   h.postFromMain({ kind: 'email', email: 'u@example' });
   await h.flush();
 }

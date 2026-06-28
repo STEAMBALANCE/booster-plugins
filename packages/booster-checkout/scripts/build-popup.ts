@@ -72,7 +72,26 @@ function readPngAsDataUriDefine(p: string): string {
   return JSON.stringify(`data:image/png;base64,${bytes.toString('base64')}`);
 }
 
+// Bun.build and NODE_ENV are process-wide; bun test may call this helper in parallel.
+let buildQueue: Promise<void> = Promise.resolve();
+
+async function withBuildLock<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = buildQueue;
+  let release!: () => void;
+  buildQueue = new Promise<void>((resolve) => { release = resolve; });
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
 export async function buildSveltePopup(opts: BuildSveltePopupOptions): Promise<string> {
+  return withBuildLock(() => buildSveltePopupUnlocked(opts));
+}
+
+async function buildSveltePopupUnlocked(opts: BuildSveltePopupOptions): Promise<string> {
   const tmp = mkdtempSync(join(tmpdir(), 'booster-popup-build-'));
   try {
     // PostCSS picks up env from process.env.NODE_ENV (svelte-preprocess
