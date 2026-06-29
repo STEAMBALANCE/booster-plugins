@@ -12,6 +12,7 @@
 
 import { test, expect, beforeEach, afterEach } from 'bun:test';
 import { ui } from '../lib/state.svelte';
+import { URLS } from '../../src/urls';
 
 class InMemoryBC extends EventTarget {
   static channels = new Map<string, Set<InMemoryBC>>();
@@ -112,17 +113,17 @@ test('init message populates ui fields when complete', () => {
     login: 'testuser',
     currency: 'RUB', balance: 1000,
     urls: {
-      support:        'https://j.chat/x',
-      popupLogoLink:      'https://l.test/x',
-      balanceCalcApi: 'https://c.test/x',
-      balanceAddApi:  'https://a.test/x',
+      support:        URLS.support,
+      popupLogoLink:  URLS.popupLogoLink,
+      balanceCalcApi: URLS.balanceCalcApi,
+      balanceAddApi:  URLS.balanceAddApi,
     },
   });
   expect(ui.userLogin).toBe('testuser');
-  expect(ui.urls.support).toBe('https://j.chat/x');
-  expect(ui.urls.popupLogoLink).toBe('https://l.test/x');
-  expect(ui.urls.balanceCalcApi).toBe('https://c.test/x');
-  expect(ui.urls.balanceAddApi).toBe('https://a.test/x');
+  expect(ui.urls.support).toBe(URLS.support);
+  expect(ui.urls.popupLogoLink).toBe(URLS.popupLogoLink);
+  expect(ui.urls.balanceCalcApi).toBe(URLS.balanceCalcApi);
+  expect(ui.urls.balanceAddApi).toBe(URLS.balanceAddApi);
   expect(ui.userCurrency).toBe('RUB');
   expect(ui.userBalance).toBe(1000);
   // initSeen — gated on login + balanceAddApi (the URL submitPay hits).
@@ -136,16 +137,16 @@ test('bridge init: populates ui.urls from BC payload', () => {
     currency: 'RUB',
     balance: 1000,
     urls: {
-      support:        'https://j.test/x',
-      popupLogoLink:      'https://l.test/x',
-      balanceCalcApi: 'https://c.test/x',
-      balanceAddApi:  'https://a.test/x',
+      support:        URLS.support,
+      popupLogoLink:  URLS.popupLogoLink,
+      balanceCalcApi: URLS.balanceCalcApi,
+      balanceAddApi:  URLS.balanceAddApi,
     },
   });
-  expect(ui.urls.support).toBe('https://j.test/x');
-  expect(ui.urls.popupLogoLink).toBe('https://l.test/x');
-  expect(ui.urls.balanceCalcApi).toBe('https://c.test/x');
-  expect(ui.urls.balanceAddApi).toBe('https://a.test/x');
+  expect(ui.urls.support).toBe(URLS.support);
+  expect(ui.urls.popupLogoLink).toBe(URLS.popupLogoLink);
+  expect(ui.urls.balanceCalcApi).toBe(URLS.balanceCalcApi);
+  expect(ui.urls.balanceAddApi).toBe(URLS.balanceAddApi);
 });
 
 test('bridge init: missing urls field leaves ui.urls empty', () => {
@@ -160,15 +161,35 @@ test('bridge init: partial urls populates only known fields', () => {
   postFromOutside({
     kind: 'init',
     urls: {
-      support:        'https://j.test/x',
-      balanceCalcApi: 'https://c.test/x',
+      support:        URLS.support,
+      balanceCalcApi: URLS.balanceCalcApi,
       // popupLogoLink and balanceAddApi missing
     },
   });
-  expect(ui.urls.support).toBe('https://j.test/x');
-  expect(ui.urls.balanceCalcApi).toBe('https://c.test/x');
+  expect(ui.urls.support).toBe(URLS.support);
+  expect(ui.urls.balanceCalcApi).toBe(URLS.balanceCalcApi);
   expect(ui.urls.popupLogoLink).toBe('');     // unchanged from default
   expect(ui.urls.balanceAddApi).toBe(''); // unchanged from default
+});
+
+test('bridge init: ignores forged urls from BC payload', () => {
+  postFromOutside({
+    kind: 'init',
+    login: 'user',
+    urls: {
+      support: 'https://evil.example/support',
+      popupLogoLink: 'https://evil.example',
+      telegram: 'https://evil.example/t',
+      balanceCalcApi: 'https://evil.example/api/balance/calc',
+      balanceAddApi: 'https://evil.example/api/balance/add',
+    },
+  });
+  expect(ui.urls.support).toBe('');
+  expect(ui.urls.popupLogoLink).toBe('');
+  expect(ui.urls.telegram).toBe('');
+  expect(ui.urls.balanceCalcApi).toBe('');
+  expect(ui.urls.balanceAddApi).toBe('');
+  expect(ui.initSeen).toBe(false);
 });
 
 test('init pre-fills ui.amount with currency-specific default when user has not typed', () => {
@@ -181,7 +202,7 @@ test('init pre-fills ui.amount with currency-specific default when user has not 
   postFromOutside({
     kind: 'init', login: 'u',
     currency: 'RUB', balance: 0,
-    urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' },
+    urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi },
   });
   expect(ui.amount).toBe(1000);
 });
@@ -195,7 +216,7 @@ test('init does NOT overwrite user-typed amount with currency default', () => {
   postFromOutside({
     kind: 'init', login: 'u',
     currency: 'RUB', balance: 0,
-    urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' },
+    urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi },
   });
   expect(ui.amount).toBe(500);  // preserved, NOT bumped to 1000
 });
@@ -206,7 +227,7 @@ test('init pre-fill is 0 (empty input) for currencies without a configured defau
   postFromOutside({
     kind: 'init', login: 'u',
     currency: 'UAH', balance: 0,
-    urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' },
+    urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi },
   });
   expect(ui.amount).toBe(0);
 });
@@ -216,13 +237,13 @@ test('spurious empty init does NOT overwrite existing state (defense per spec §
   postFromOutside({
     kind: 'init', login: 'testuser',
     currency: 'RUB', balance: 1000,
-    urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' },
+    urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi },
   });
   // Send empty init
   postFromOutside({ kind: 'init', login: '', currency: '', balance: null });
   // Все поля сохранились
   expect(ui.userLogin).toBe('testuser');
-  expect(ui.urls.balanceAddApi).toBe('https://h.local/api/balance/add');
+  expect(ui.urls.balanceAddApi).toBe(URLS.balanceAddApi);
   expect(ui.userBalance).toBe(1000);   // ★ balance NOT wiped (per code-review I-2)
 });
 
@@ -273,7 +294,7 @@ test('pay GATE: payAndNavigate defers and /balance/add never fires without uuid'
     if (String(url).includes('/api/balance/add')) { addCalls++; return new Response(JSON.stringify({ data: { redirectUrl: 'https://x' } })); }
     return new Response('null');
   }) as typeof fetch;
-  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' } });
+  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi } });
   postFromOutside({ kind: 'email', email: '' });
   ui.amount = 100;
   expect(ui.initSeen).toBe(true);
@@ -292,13 +313,13 @@ test('pay GATE: a queued pay drains once uuid arrives via a later init', async (
     return new Response('null');
   }) as typeof fetch;
   ui.amount = 100;
-  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' } });
+  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi } });
   postFromOutside({ kind: 'email', email: '' });
   await payAndNavigate();
   expect(ui.pendingPay).toBe(true);            // gated on uuid
   expect(addCalls).toBe(0);
   // uuid lands on a re-pushed init → gate releases, queued pay drains.
-  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' }, uuid: 'late-uuid' });
+  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi }, uuid: 'late-uuid' });
   expect(ui.pendingPay).toBe(false);
   await new Promise((r) => setTimeout(r, 30));
   expect(addCalls).toBe(1);
@@ -311,12 +332,12 @@ test('pay GATE: uuidResolved give-up releases a queued pay (never blocks payment
     return new Response('null');
   }) as typeof fetch;
   ui.amount = 100;
-  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' } });
+  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi } });
   postFromOutside({ kind: 'email', email: '' });
   await payAndNavigate();
   expect(ui.pendingPay).toBe(true);
   // Main shell gave up resolving the SetupId → release the gate so the user can pay.
-  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' }, uuidResolved: true });
+  postFromOutside({ kind: 'init', login: 'u', urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi }, uuidResolved: true });
   expect(ui.pendingPay).toBe(false);
   await new Promise((r) => setTimeout(r, 30));
   expect(addCalls).toBe(1);
@@ -404,7 +425,7 @@ test('pendingPay drain triggers payAndNavigate (fires fetch + posts navigate) wh
   postFromOutside({
     kind: 'init', login: 'testuser',
     currency: 'RUB', balance: 1000,
-    urls: { support: '', popupLogoLink: '', balanceCalcApi: 'https://h.local/api/balance/calc', balanceAddApi: 'https://h.local/api/balance/add' },
+    urls: { support: '', popupLogoLink: '', balanceCalcApi: URLS.balanceCalcApi, balanceAddApi: URLS.balanceAddApi },
     uuid: 'test-uuid',
   });
   expect(ui.pendingPay).toBe(true);  // still pending — email not yet
@@ -449,7 +470,7 @@ test('email leak guard: prior test email does not appear in subsequent submitPay
     return new Response(JSON.stringify({ data: { redirectUrl: 'https://x' } }));
   }) as typeof fetch;
 
-  ui.amount = 100; ui.urls.balanceAddApi = 'https://h.local/api/balance/add'; ui.userLogin = 'u';
+  ui.amount = 100; ui.urls.balanceAddApi = URLS.balanceAddApi; ui.userLogin = 'u';
   ui.methodId = 'paypalych-sbp';
   ui.initSeen = true; ui.emailReceived = true; ui.uuidReceived = true;
   await payAndNavigate();
@@ -467,7 +488,7 @@ test('shown message resets transient UI state but preserves session state', () =
     kind: 'init', login: 'testuser',
     currency: 'KZT',
     balance: 2000,
-    urls: { support: 'https://j.chat/x', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' },
+    urls: { support: URLS.support, popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi },
     uuid: 'sess-uuid',
   });
   postFromOutside({ kind: 'email', email: 'matrix@example.com' });
@@ -508,10 +529,10 @@ test('shown message resets transient UI state but preserves session state', () =
   // Session state preserved (login, urls, currency, balance,
   // methodId, initSeen, emailReceived).
   expect(ui.userLogin).toBe('testuser');
-  expect(ui.urls.balanceAddApi).toBe('https://h.local/api/balance/add');
+  expect(ui.urls.balanceAddApi).toBe(URLS.balanceAddApi);
   expect(ui.userCurrency).toBe('KZT');
   expect(ui.userBalance).toBe(2000);
-  expect(ui.urls.support).toBe('https://j.chat/x');
+  expect(ui.urls.support).toBe(URLS.support);
   expect(ui.methodId).toBe('paypalych-card');  // user's last choice persisted
   expect(ui.initSeen).toBe(true);
   expect(ui.emailReceived).toBe(true);
@@ -531,7 +552,7 @@ test('hidden message resets transient UI state but preserves session state', () 
     kind: 'init', login: 'testuser',
     currency: 'KZT',
     balance: 2000,
-    urls: { support: 'https://j.chat/x', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' },
+    urls: { support: URLS.support, popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi },
     uuid: 'sess-uuid',
   });
   postFromOutside({ kind: 'email', email: 'matrix@example.com' });
@@ -563,10 +584,10 @@ test('hidden message resets transient UI state but preserves session state', () 
   // methodId, initSeen, emailReceived). Same invariants as the 'shown'
   // reset case.
   expect(ui.userLogin).toBe('testuser');
-  expect(ui.urls.balanceAddApi).toBe('https://h.local/api/balance/add');
+  expect(ui.urls.balanceAddApi).toBe(URLS.balanceAddApi);
   expect(ui.userCurrency).toBe('KZT');
   expect(ui.userBalance).toBe(2000);
-  expect(ui.urls.support).toBe('https://j.chat/x');
+  expect(ui.urls.support).toBe(URLS.support);
   expect(ui.methodId).toBe('paypalych-card');
   expect(ui.initSeen).toBe(true);
   expect(ui.emailReceived).toBe(true);
@@ -606,7 +627,7 @@ test('hidden does NOT kick a calc fetch (popup is hidden, fetch would be wastefu
   postFromOutside({
     kind: 'init', login: 'u',
     currency: 'RUB', balance: 1000,
-    urls: { support: '', popupLogoLink: '', balanceCalcApi: 'https://h.local/api/balance/calc', balanceAddApi: 'https://h.local/api/balance/add' },
+    urls: { support: '', popupLogoLink: '', balanceCalcApi: URLS.balanceCalcApi, balanceAddApi: URLS.balanceAddApi },
   });
   postFromOutside({ kind: 'email', email: 'u@example' });
   postFromOutside({
@@ -656,7 +677,7 @@ test('hidden cancels a pending debounced calc (no fetch fires post-hide)', async
   // directly so the initial-mount heal-handler calc doesn't fire and
   // contaminate the count.
   ui.userLogin = 'u';
-  ui.urls.balanceCalcApi = 'https://h.local/api/balance/calc';
+  ui.urls.balanceCalcApi = URLS.balanceCalcApi;
   ui.userCurrency = 'RUB';
   ui.userBalance = 1000;
   ui.amount = 1234;
@@ -703,7 +724,7 @@ test('shown message kicks a fresh calc even when amount + methodId did not chang
   postFromOutside({
     kind: 'init', login: 'u',
     currency: 'RUB', balance: 1000,
-    urls: { support: '', popupLogoLink: '', balanceCalcApi: 'https://h.local/api/balance/calc', balanceAddApi: 'https://h.local/api/balance/add' },
+    urls: { support: '', popupLogoLink: '', balanceCalcApi: URLS.balanceCalcApi, balanceAddApi: URLS.balanceAddApi },
   });
   postFromOutside({ kind: 'email', email: 'u@example' });
   postFromOutside({
@@ -808,7 +829,7 @@ test('payAndNavigate posts navigate envelope carrying uid when submitPay returns
   postFromOutside({
     kind: 'init', login: 'u',
     currency: 'RUB', balance: 1000,
-    urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: 'https://h.local/api/balance/add' },
+    urls: { support: '', popupLogoLink: '', balanceCalcApi: '', balanceAddApi: URLS.balanceAddApi },
     uuid: 'test-uuid',
   });
   postFromOutside({ kind: 'email', email: '' });
@@ -924,10 +945,10 @@ test('postOpenDoc posts {kind:open-doc, doc} for each doc', () => {
 test('init forwards urls.telegram into ui.urls.telegram', () => {
   postFromOutside({
     kind: 'init', login: 'u', currency: 'RUB', balance: 0,
-    urls: { support: '', popupLogoLink: '', telegram: 'https://steambalance.cc/c/0eb9',
+    urls: { support: '', popupLogoLink: '', telegram: URLS.telegram,
             balanceCalcApi: '', balanceAddApi: '' },
   });
-  expect(ui.urls.telegram).toBe('https://steambalance.cc/c/0eb9');
+  expect(ui.urls.telegram).toBe(URLS.telegram);
 });
 
 test('resetTransientUI (via hidden) clears ui.payError', () => {

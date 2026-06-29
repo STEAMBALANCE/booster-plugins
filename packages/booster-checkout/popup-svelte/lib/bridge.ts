@@ -33,6 +33,7 @@ import {
   ui, applyPaymentMethods, defaultAmountForCurrency,
   type PaymentMethod,
 } from './state.svelte';
+import { URLS } from '../../src/urls';
 
 // Must match the wire-side popupId emitted by ui.ts after the per-plugin
 // UI wrapper auto-prefixes it (spec H4: <plugin-id>__<user-id>). The
@@ -44,6 +45,10 @@ const CHANNEL = 'sb_cmd';
 
 let bc: BroadcastChannel | null = null;
 let email = '';   // local-only PII (never goes into ui state)
+
+function acceptKnownUrl(value: unknown, expected: string): string | null {
+  return value === expected ? expected : null;
+}
 
 export function initBridge(): void {
   // Idempotent: re-entry would leak the previous channel + its listener
@@ -150,11 +155,16 @@ function handleIncoming(d: Record<string, unknown>): void {
     const urls = (d as { urls?: unknown }).urls;
     if (urls && typeof urls === 'object') {
       const u = urls as Record<string, unknown>;
-      if (typeof u.support        === 'string') ui.urls.support        = u.support;
-      if (typeof u.popupLogoLink  === 'string') ui.urls.popupLogoLink  = u.popupLogoLink;
-      if (typeof u.telegram       === 'string') ui.urls.telegram       = u.telegram;
-      if (typeof u.balanceCalcApi === 'string') ui.urls.balanceCalcApi = u.balanceCalcApi;
-      if (typeof u.balanceAddApi  === 'string') ui.urls.balanceAddApi  = u.balanceAddApi;
+      const support = acceptKnownUrl(u.support, URLS.support);
+      const popupLogoLink = acceptKnownUrl(u.popupLogoLink, URLS.popupLogoLink);
+      const telegram = acceptKnownUrl(u.telegram, URLS.telegram);
+      const balanceCalcApi = acceptKnownUrl(u.balanceCalcApi, URLS.balanceCalcApi);
+      const balanceAddApi = acceptKnownUrl(u.balanceAddApi, URLS.balanceAddApi);
+      if (support) ui.urls.support = support;
+      if (popupLogoLink) ui.urls.popupLogoLink = popupLogoLink;
+      if (telegram) ui.urls.telegram = telegram;
+      if (balanceCalcApi) ui.urls.balanceCalcApi = balanceCalcApi;
+      if (balanceAddApi) ui.urls.balanceAddApi = balanceAddApi;
     }
     // Stack versions (injector + framework) for the popup's booster
     // headers — delivered at runtime, NOT baked into the bundle (see
