@@ -235,6 +235,57 @@ describe('registerAppPage', () => {
     expect((bar.querySelector('.booster-topup-input') as HTMLInputElement).value).toBe('');
   });
 
+  test('price topup is usable while the key catalogue is still loading', async () => {
+    const { sb, pageReg } = makeSbStub();
+    const published: unknown[] = [];
+    sb.bus.publish = (topic: string, data: unknown) => published.push({ topic, data });
+    let resolveKeys!: (items: KeyItem[]) => void;
+    registerAppPage(sb, {
+      keysClient: makeKeysClient({ requestKeys: () => new Promise(r => { resolveKeys = r; }) }),
+      fetchCatalogue: async () => ({ status: 'empty' }),
+    });
+    setBody(editionBody);
+    const pending = reg(pageReg).mount(mountCtx());
+    await tick();
+    const input = document.querySelector<HTMLInputElement>('.booster-topup-input');
+    expect(input?.value).toBe('7600');
+    document.querySelector<HTMLButtonElement>('.booster-topup-submit')!.click();
+    expect(published).toContainEqual({ topic: 'booster-addfunds.topup-requested', data: { amount: 7600 } });
+    resolveKeys([]);
+    const cleanup = await pending;
+    cleanup?.();
+    expect(document.getElementById('booster-topup-bar')).toBeNull();
+  });
+
+  test('a failing catalogue leaves price topup available', async () => {
+    const { sb, pageReg } = makeSbStub();
+    registerAppPage(sb, {
+      keysClient: makeKeysClient({ requestKeys: async () => { throw new Error('offline'); } }),
+      fetchCatalogue: async () => ({ status: 'empty' }),
+    });
+    setBody(editionBody);
+    const cleanup = await reg(pageReg).mount(mountCtx());
+    expect(document.querySelector<HTMLInputElement>('.booster-topup-input')?.value).toBe('7600');
+    cleanup?.();
+  });
+
+  test('navigation during a pending catalogue request removes the early topup bar', async () => {
+    const { sb, pageReg } = makeSbStub();
+    let resolveKeys!: (items: KeyItem[]) => void;
+    registerAppPage(sb, {
+      keysClient: makeKeysClient({ requestKeys: () => new Promise(r => { resolveKeys = r; }) }),
+      fetchCatalogue: async () => ({ status: 'empty' }),
+    });
+    setBody(editionBody);
+    const ac = new AbortController();
+    const pending = reg(pageReg).mount(mountCtx(undefined, ac.signal));
+    await tick();
+    expect(document.getElementById('booster-topup-bar')).not.toBeNull();
+    ac.abort(); resolveKeys([]);
+    await pending;
+    expect(document.getElementById('booster-topup-bar')).toBeNull();
+  });
+
   test('region page + keys → keys block after #error_box', async () => {
     const { sb, pageReg } = makeSbStub();
     registerAppPage(sb, { keysClient: makeKeysClient({ items: [item({ packageId: 22350 })] }) });

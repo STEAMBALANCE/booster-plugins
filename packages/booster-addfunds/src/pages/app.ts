@@ -148,11 +148,8 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
     const col = buyArea.parentElement;
     if (!col) return;
 
-    const appId = parseAppId(ctx.url.toString());
-    const items = appId != null ? await keysClient.requestKeys(appId, ctx.signal) : [];
-    if (ctx.signal.aborted) return;
-
     const teardowns: Array<() => void> = [];
+    let removeTopupBar: (() => void) | undefined;
 
     // Topup bar ("Пополнить"), inserted as the first element of the editions
     // column. Idempotent: a second mount on the same DOM is a no-op.
@@ -181,11 +178,15 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
       if (editionPrice != null) bar.setAmount(editionPrice);
       ensureTopupStyles();
       col.insertBefore(bar.root, col.firstChild);
-      teardowns.push(() => {
+      let removed = false;
+      removeTopupBar = () => {
+        if (removed) return;
+        removed = true;
         unsub();
         try { bar.root.remove(); } catch { /* detached */ }
-        document.getElementById('booster-topup-style')?.remove();
-      });
+        if (!document.getElementById('booster-topup-bar')) document.getElementById('booster-topup-style')?.remove();
+      };
+      teardowns.push(removeTopupBar);
     };
 
     // Mount the edition offer chip for a matched KeyItem into its block's native
@@ -221,12 +222,22 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
       });
     };
 
+    // Price-based topup is local functionality: show it while the optional key
+    // catalogue loads, including when that service is slow or unavailable.
+    // A matching offer replaces it once loaded, preserving the upstream choice.
+    mountTopupBar();
+    const appId = parseAppId(ctx.url.toString());
+    let items: KeyItem[] = [];
+    try { items = appId != null ? await keysClient.requestKeys(appId, ctx.signal) : []; }
+    catch { /* Keep the working topup bar when the catalogue is unavailable. */ }
+    if (ctx.signal.aborted) { for (const t of teardowns) t(); return; }
+
     const blocks = [...buyArea.querySelectorAll('.game_area_purchase_game')] as HTMLElement[];
     const pairs = matchItemsToBlocks(items, blocks);
     if (pairs.length > 0) {
+      removeTopupBar?.();
       for (const { block, item } of pairs) mountChip(block, item);
     } else {
-      mountTopupBar();
       // «СКОРО» goes on the first real PAID edition — skip the free demo
       // download row (and any free/install block) so the chip never lands on a
       // "Загрузить" block. No purchasable block → no chip (bar still shows).
