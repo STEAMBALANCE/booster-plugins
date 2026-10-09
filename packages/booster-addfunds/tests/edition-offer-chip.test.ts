@@ -12,7 +12,7 @@ beforeEach(() => {
   });
 });
 
-const base: KeyItem = { itemId: 1, name: 'X', isActive: true, regionLabel: 'Global', packageId: 13533, productType: 'base', price: 129.58, oldPrice: null, discountPercent: 0 };
+const base: KeyItem = { itemId: 1, name: 'X', isActive: true, regionLabel: 'Global', packageId: 13533, packageType: 'package', productType: 'base', price: 129.58, oldPrice: null, discountPercent: 0 };
 
 test('active item: price + buy fires onBuy; single price gets --single modifier', () => {
   let clicked = 0;
@@ -47,6 +47,22 @@ test('root uses class booster-eo (not the old singleton id), keeps data-sb', () 
   expect(root.classList.contains('booster-eo')).toBe(true);
   expect(root.id).toBe('');
   expect(root.getAttribute('data-sb')).toBe('1');
+});
+
+test('setCompact steps the modifiers up and back down', () => {
+  const { root, setCompact } = buildEditionOfferChip({ item: { ...base, price: 3702, oldPrice: 4037.5, discountPercent: 8 } });
+  setCompact(1);
+  expect(root.classList.contains('booster-eo--compact')).toBe(true);
+  expect(root.classList.contains('booster-eo--tight')).toBe(false);
+  setCompact(2);
+  expect(root.classList.contains('booster-eo--tight')).toBe(true);
+  setCompact(0);
+  expect(root.classList.contains('booster-eo--compact')).toBe(false);
+  expect(root.classList.contains('booster-eo--tight')).toBe(false);
+  // The elements the levels hide stay in the DOM — CSS owns the visibility, so a
+  // level change never rebuilds the chip.
+  expect(root.querySelector('.booster-eo-discount')).not.toBeNull();
+  expect(root.querySelector('.booster-eo-was')).not.toBeNull();
 });
 
 test('setBusy disables the buy button', () => {

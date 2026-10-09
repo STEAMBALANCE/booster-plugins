@@ -43,16 +43,32 @@
 .booster-eo .booster-eo-buy--busy { opacity: .6; }
 .booster-eo .booster-eo-buy-icon { display: inline-flex; align-items: center; width: 14px; height: 12px; }
 
+/* ── Compact levels ───────────────────────────────────────────────────────────
+ * Applied by pages/app.ts::fitChip when the host action row cannot hold the full
+ * chip — a bundle row carries TWO native clusters («Информация о наборе» +
+ * discount/cart, ~470px of a ~700px row), so the full 240px chip would spill ~25px
+ * past the purchase block (CDP-measured on /app/2300320). Level 1 drops the
+ * discount badge (~60px), level 2 also drops the struck original price. Price and
+ * «Купить» always survive. Edition rows have room and stay at level 0. */
+.booster-eo--compact .booster-eo-discount { display: none; }
+.booster-eo--tight .booster-eo-was { display: none; }
+/* Single visible price line → same treatment as .booster-eo--single. */
+.booster-eo--tight .booster-eo-now { font-size: 14px; margin-top: 0; }
+
 /* Inactive item ("Скоро в продаже"): muted label, no buy button. */
 .booster-eo--inactive { padding: 7px 12px; }
 .booster-eo .booster-eo-inactive-label {
   color: #fff; opacity: .7; font-size: 12px; line-height: 16px; white-space: nowrap;
 }
 
-/* Host modifier: turn the edition's native action into a flex row so the native
- * cluster sits left and our chip (margin-left:auto) pins right. The action's only
- * native child is .game_purchase_action_bg (CDP-verified), and the discount
- * countdown lives outside .game_purchase_action — so this is safe. */
+/* Host modifier: turn the purchase row's native action into a flex row so the
+ * native cluster sits left and our chip (margin-left:auto) pins right. The
+ * action's only native children are .game_purchase_action_bg elements
+ * (CDP-verified) — one on an edition row, two on a bundle row («Информация о
+ * наборе» + discount/cart), and flex keeps them in DOM order either way. The
+ * discount countdown lives outside .game_purchase_action — so this is safe.
+ * NB: a bundle row's native cluster is the widest one we host; confirm in-Steam
+ * that it is not squeezed at the narrow store breakpoints. */
 /* overflow:visible defends the «СКОРО» badge (which protrudes above the button)
  * against the host clipping it; no effect on the live full chip, which doesn't
  * overflow. Note: only THIS host node is under our control — native ancestors

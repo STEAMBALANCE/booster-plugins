@@ -6,16 +6,29 @@
 // checkout has broadcast a paymentId (see lib/keys-fetch.ts) — toKeyItem below
 // is the parser for that direct path, itself a duplicate of checkout's own
 // main/keys-fetch.ts::toKeyItem (same backend response shape).
+/** Steam id-space `packageId` belongs to — the backend's `package.type`.
+ *  'package' → sub id (`input[name="subid"]`), 'bundle' → bundle id
+ *  (`input[name="bundleid"]`). The two spaces overlap numerically, so
+ *  edition-match.ts never pairs an offer to a block on the id alone. */
+export type PackageType = 'package' | 'bundle';
+
 export interface KeyItem {
   itemId: number;
   name: string;
   isActive: boolean;
   regionLabel: string;
   packageId: number | null;
+  /** null = backend sent no `package.type` (pre-bundle backend) → treated as
+   *  the sub-id space, the only one that existed back then. */
+  packageType: PackageType | null;
   productType: string | null;
   price: number;        // ₽, float
   oldPrice: number | null;
   discountPercent: number;
+}
+
+function toPackageType(v: unknown): PackageType | null {
+  return v === 'package' || v === 'bundle' ? v : null;
 }
 
 export function toKeyItem(raw: unknown): KeyItem | null {
@@ -29,6 +42,7 @@ export function toKeyItem(raw: unknown): KeyItem | null {
     isActive: r.is_active === true,
     regionLabel: typeof r.region_label === 'string' ? r.region_label : '',
     packageId: pkg && typeof pkg.id === 'number' ? pkg.id : null,
+    packageType: pkg ? toPackageType(pkg.type) : null,
     productType: pkg && typeof pkg.product_type === 'string' ? pkg.product_type : null,
     price: r.price,
     oldPrice: typeof r.old_price === 'number' ? r.old_price : null,

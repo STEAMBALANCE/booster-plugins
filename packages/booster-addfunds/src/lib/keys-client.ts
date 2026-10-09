@@ -2,6 +2,7 @@ import type { SbApi } from '@steambalance/booster-framework/api-types';
 import type { KeyItem } from './keys-api';
 import type { KeysConfigService } from './keys-config';
 import { fetchKeysDirect as realFetchKeysDirect } from './keys-fetch';
+import { keysTargetParam, type KeysTarget } from './keys-target';
 
 let nonceCounter = 0;
 function makeNonce(): string {
@@ -62,7 +63,7 @@ export function createKeysClient(sb: SbApi, opts: {
   // (cold start / no usable payment method) or if the direct fetch itself
   // throws — fetchKeysDirect is designed to never throw, so this catch is
   // belt-and-suspenders, not a normally-taken path.
-  function requestKeys(appid: number, signal: AbortSignal): Promise<KeyItem[]> {
+  function requestKeys(target: KeysTarget, signal: AbortSignal): Promise<KeyItem[]> {
     const cfg = opts.keysConfig?.get();
     if (cfg && cfg.paymentId) {
       // NOTE: sb.net doesn't wire AbortSignal in v1 (NetFetchInit.signal is a
@@ -73,20 +74,20 @@ export function createKeysClient(sb: SbApi, opts: {
       // value if the account's store country changed mid-session without a
       // re-broadcast) — acceptable: store country is account-bound/effectively
       // stable per session, and the actual charge is keyed by itemId, not region.
-      return fetchDirect(sb, { appid, paymentId: cfg.paymentId, storeCountry: cfg.storeCountry }, signal)
-        .catch(() => requestKeysViaBus(appid, signal));
+      return fetchDirect(sb, { target, paymentId: cfg.paymentId, storeCountry: cfg.storeCountry }, signal)
+        .catch(() => requestKeysViaBus(target, signal));
     }
-    return requestKeysViaBus(appid, signal);
+    return requestKeysViaBus(target, signal);
   }
 
-  function requestKeysViaBus(appid: number, signal: AbortSignal): Promise<KeyItem[]> {
+  function requestKeysViaBus(target: KeysTarget, signal: AbortSignal): Promise<KeyItem[]> {
     const reqId = nextId();
     activeListReqId = reqId;
     return new Promise<KeyItem[]>((resolve) => {
       let done = false;
       const finish = (items: KeyItem[]): void => { if (done) return; done = true; clearInterval(iv); clearTimeout(to); listWaiters.delete(reqId); resolve(items); };
       listWaiters.set(reqId, finish);
-      const send = (): void => { if (!done) sb.bus.publish('booster-addfunds.keys.request', { reqId, appid }); };
+      const send = (): void => { if (!done) sb.bus.publish('booster-addfunds.keys.request', { reqId, [keysTargetParam(target)]: target.id }); };
       onReady.push(send);
       send();
       const iv = setInterval(send, retryMs);

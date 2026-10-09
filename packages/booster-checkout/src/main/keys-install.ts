@@ -1,6 +1,6 @@
 import type { SbApi, SteamUser } from '@steambalance/booster-framework/api-types';
 import { resolveKeysPaymentId } from './keys-payment';
-import { fetchKeys } from './keys-fetch';
+import { fetchKeys, keysTargetParam, readKeysTarget } from './keys-fetch';
 import { postKeysOrder } from './keys-order';
 import { LL } from '../i18n';
 
@@ -68,15 +68,22 @@ export function installKeysBridge(sb: SbApi, deps: KeysBridgeDeps): () => void {
 
   subs.push(sb.bus.subscribe('booster-addfunds.keys.request', (data) => {
     void (async () => {
-      const d = data as { reqId?: unknown; appid?: unknown } | null;
-      if (!d || typeof d.reqId !== 'string' || typeof d.appid !== 'number') return;
-      const reqId = d.reqId; const appid = d.appid;
+      const d = data as Record<string, unknown> | null;
+      if (!d || typeof d.reqId !== 'string') return;
+      // Which Steam id space the store tab is asking about — app / sub / bundle.
+      // A payload naming none is unanswerable and dropped.
+      const target = readKeysTarget(d);
+      if (!target) return;
+      const reqId = d.reqId;
+      // Echo the requester's own id field back, so a store tab can tell whose
+      // answer this is without knowing which id space it asked in.
+      const echo = { [keysTargetParam(target)]: target.id };
       let storeCountry: string | undefined;
       try { storeCountry = await sb.steam.getStoreCountry(); } catch { storeCountry = undefined; }
       const paymentId = await resolveKeysPaymentId(sb, fetchImpl);
-      if (!paymentId) { sb.bus.publish('booster-checkout.keys.response', { reqId, appid, items: [], error: 'no-payment' }); return; }
-      const items = await fetchKeys(sb, { appid, paymentId, storeCountry });
-      sb.bus.publish('booster-checkout.keys.response', { reqId, appid, items });
+      if (!paymentId) { sb.bus.publish('booster-checkout.keys.response', { reqId, ...echo, items: [], error: 'no-payment' }); return; }
+      const items = await fetchKeys(sb, { target, paymentId, storeCountry });
+      sb.bus.publish('booster-checkout.keys.response', { reqId, ...echo, items });
     })();
   }));
 

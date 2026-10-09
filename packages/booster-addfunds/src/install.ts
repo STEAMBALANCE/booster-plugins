@@ -1,6 +1,7 @@
 import type { PluginContext } from '@steambalance/booster-framework';
 import { registerAddFundsPage } from './pages/addfunds';
 import { registerAppPage } from './pages/app';
+import { registerPackagePage } from './pages/package';
 import { registerCartPage } from './pages/cart';
 import { registerCatalogNav } from './pages/catalog-nav';
 import { createKeysClient } from './lib/keys-client';
@@ -9,7 +10,7 @@ import { ensureKeysConfigService } from './lib/keys-config';
 /**
  * Web-context plugin entry point. Installed by the plugin runner when
  * sb.context.kind === ContextKind.Web ('web') (Steam store BrowserView).
- * Registers the AddFunds, App, and Cart pages; future store-page modules
+ * Registers the AddFunds, App, Package, and Cart pages; future store-page modules
  * slot in here next to them (register* calls), all behind a single
  * sb.lifecycle.ready() await so framework state is settled before any DOM
  * observers attach.
@@ -35,13 +36,14 @@ export async function installAddFundsWeb(ctx: PluginContext): Promise<() => void
   // (booster-addfunds.keys.config.request) fires as early as possible.
   const keysConfig = ensureKeysConfigService(sb);
 
-  // One keys client per install, shared by the App page (region keys block +
-  // edition-offer chips). Its bus subscriptions are scope-abort bound; dispose()
-  // in the teardown unwinds them eagerly for cleanliness.
+  // One keys client per install, shared by the App and Package pages (region
+  // keys block + edition-offer chips). Its bus subscriptions are scope-abort
+  // bound; dispose() in the teardown unwinds them eagerly for cleanliness.
   const keysClient = createKeysClient(sb, { keysConfig });
 
   registerAddFundsPage(sb);
   registerAppPage(sb, { keysClient });
+  registerPackagePage(sb, { keysClient });
   registerCartPage(sb);
   registerCatalogNav(sb);
   // Page lifecycle is owned by sb.pages.register internally; no manual cleanup needed

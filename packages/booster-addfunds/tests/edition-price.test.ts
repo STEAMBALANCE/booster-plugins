@@ -67,3 +67,24 @@ test('readFirstEditionPriceInfo → null when no usable price', () => {
   document.body.innerHTML = `<div id="game_area_purchase"><div class="game_purchase_price price">Бесплатно</div></div>`;
   expect(readFirstEditionPriceInfo(document)).toBeNull();
 });
+
+// /sub/ and /bundle/ pages carry no `#game_area_purchase` — Steam splits the
+// purchase area into `#game_area_purchase_top` / `_bottom`, both keeping the
+// `game_area_purchase` CLASS. Without the class selector the topup bar's
+// prefill reads nothing on exactly the pages the bar was added to.
+test('reads the price from a package page whose purchase area is id-suffixed', () => {
+  document.body.innerHTML = `<div id="game_area_purchase_top" class="game_area_purchase tablet_hidden">
+    <div class="game_purchase_price price" data-price-final="599900">5999 руб.</div>
+  </div>`;
+  expect(readFirstEditionPrice(document)).toBe(5999);
+});
+
+test('still prefers #game_area_purchase when a page has both, whatever the DOM order', () => {
+  document.body.innerHTML = `<div id="game_area_purchase_top" class="game_area_purchase">
+    <div class="game_purchase_price price" data-price-final="599900">5999 руб.</div>
+  </div>
+  <div id="game_area_purchase">
+    <div class="game_purchase_price price" data-price-final="100000">1000₽</div>
+  </div>`;
+  expect(readFirstEditionPrice(document)).toBe(1000);
+});

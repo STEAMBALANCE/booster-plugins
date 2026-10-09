@@ -320,3 +320,57 @@ describe('installKeysBridge', () => {
     expect((res!.data as any).message).toBe('Регион недоступен');
   });
 });
+
+// The store side (booster-addfunds) addresses three Steam id spaces — app, sub
+// (package) and bundle — and names the bus field after the backend query field
+// it wants. /app/ keeps the legacy `appid` shape so an older store bundle and a
+// newer main-shell still talk to each other.
+describe('installKeysBridge — keys target', () => {
+  function keysNet(capture: { url: string }) {
+    return (async (url: string) => {
+      capture.url = url;
+      return { ok: true, status: 200, headers: {}, json: async () => ({ success: true, data: { items: [] } }), text: async () => '' };
+    }) as any;
+  }
+
+  test('a sub request fetches the sub id space and echoes sub back', async () => {
+    const bus = makeBus(); const cap = { url: '' };
+    installKeysBridge(makeSb(bus, { country: 'RU', netFetch: keysNet(cap) }), { openPayment: async () => true, fetchImpl: paymentsFetch });
+    bus.publish('booster-addfunds.keys.request', { reqId: 'r-sub', sub: 1010506 });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(cap.url).toContain('sub=1010506');
+    expect(cap.url).not.toContain('appid=');
+    const resp = bus.published.find((p) => p.topic === 'booster-checkout.keys.response')!;
+    expect(resp.data as any).toMatchObject({ reqId: 'r-sub', sub: 1010506 });
+  });
+
+  test('a bundle request fetches the bundle id space and echoes bundle back', async () => {
+    const bus = makeBus(); const cap = { url: '' };
+    installKeysBridge(makeSb(bus, { country: 'RU', netFetch: keysNet(cap) }), { openPayment: async () => true, fetchImpl: paymentsFetch });
+    bus.publish('booster-addfunds.keys.request', { reqId: 'r-bun', bundle: 42206 });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(cap.url).toContain('bundle=42206');
+    expect(cap.url).not.toContain('appid=');
+    const resp = bus.published.find((p) => p.topic === 'booster-checkout.keys.response')!;
+    expect(resp.data as any).toMatchObject({ reqId: 'r-bun', bundle: 42206 });
+  });
+
+  test('an app request still fetches appid and echoes appid back', async () => {
+    const bus = makeBus(); const cap = { url: '' };
+    installKeysBridge(makeSb(bus, { country: 'RU', netFetch: keysNet(cap) }), { openPayment: async () => true, fetchImpl: paymentsFetch });
+    bus.publish('booster-addfunds.keys.request', { reqId: 'r-app', appid: 108710 });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(cap.url).toContain('appid=108710');
+    const resp = bus.published.find((p) => p.topic === 'booster-checkout.keys.response')!;
+    expect(resp.data as any).toMatchObject({ reqId: 'r-app', appid: 108710 });
+  });
+
+  test('a request naming no id space at all is ignored', async () => {
+    const bus = makeBus(); const cap = { url: '' };
+    installKeysBridge(makeSb(bus, { country: 'RU', netFetch: keysNet(cap) }), { openPayment: async () => true, fetchImpl: paymentsFetch });
+    bus.publish('booster-addfunds.keys.request', { reqId: 'r-none' });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(cap.url).toBe('');
+    expect(bus.published.some((p) => p.topic === 'booster-checkout.keys.response')).toBe(false);
+  });
+});

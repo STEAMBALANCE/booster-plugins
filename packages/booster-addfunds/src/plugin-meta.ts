@@ -1,5 +1,6 @@
 import type { PluginMeta } from '@steambalance/booster-framework/testing';
 import { ADDFUNDS_URL_PATTERNS } from './url-patterns';
+import { FRONT_HOST } from './urls';
 
 // version is a placeholder; overridden at build time by reading
 // package.json::version (see build.ts). NO env-var override — release.ts
@@ -14,7 +15,10 @@ export const pluginMeta: PluginMeta = {
   // and this manifest-sidecar source stay byte-identical (crossValidate subset).
   urlPatterns: ADDFUNDS_URL_PATTERNS,
   grantedCapabilities: ['ui', 'steam', 'configs', 'bus', 'pages', 'net'],
-  allowedHosts: ['steambalance.cc'],
+  // Tracks FRONT_HOST — a dev-channel build whose URLs moved but whose
+  // allowedHosts did not would fail every sb.net call with
+  // "net_fetch: host not allowed".
+  allowedHosts: [FRONT_HOST],
   subscribeTopics: [
     'booster-checkout.keys.response',
     'booster-checkout.keys.email-required',

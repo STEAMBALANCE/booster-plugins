@@ -5,6 +5,9 @@ import { join, resolve } from 'node:path';
 import { buildSveltePopup } from './scripts/build-popup';
 import { validatePluginMeta } from '@steambalance/booster-framework/testing';
 import { pluginMeta as basePluginMeta } from './src/plugin-meta';
+// Resolved here (Bun runtime, sees SB_FRONT_URL) and handed to the bundle as
+// a define — src/urls.ts has no other way to learn the origin once bundled.
+import { FRONT_ORIGIN } from './src/urls';
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
 // package.json::version is the only source (matches booster-addfunds).
@@ -53,6 +56,7 @@ async function buildOnce(): Promise<void> {
       __SB_PLUGIN_VERSION__:    JSON.stringify(version),
       __SB_PRODUCTION__:        JSON.stringify(isProd),
       __SB_HEADER_ICON_SVG__:   JSON.stringify(headerIconSvg),
+      __SB_FRONT_ORIGIN__:      JSON.stringify(FRONT_ORIGIN),
     },
   });
 

@@ -35,6 +35,11 @@ export interface EditionChipOptions {
 export interface EditionChip {
   root: HTMLElement;
   setBusy(b: boolean): void;
+  /** Shrink the chip to fit a crowded action row (see fitChip in pages/app.ts).
+   *  0 = full design; 1 = drop the discount badge; 2 = also drop the struck
+   *  original price, leaving the final price + the buy button. Idempotent:
+   *  any level may be set at any time. */
+  setCompact(level: 0 | 1 | 2): void;
 }
 
 export function buildEditionOfferChip(opts: EditionChipOptions): EditionChip {
@@ -114,6 +119,10 @@ export function buildEditionOfferChip(opts: EditionChipOptions): EditionChip {
       if (!buy) return;
       buy.disabled = b;
       buy.classList.toggle('booster-eo-buy--busy', b);
+    },
+    setCompact(level: 0 | 1 | 2): void {
+      root.classList.toggle('booster-eo--compact', level >= 1);
+      root.classList.toggle('booster-eo--tight', level >= 2);
     },
   };
 }

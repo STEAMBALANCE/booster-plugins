@@ -5,15 +5,18 @@
 // otherwise the bus round-trip (requestKeysViaBus) stays the source of truth.
 import type { SbApi } from '@steambalance/booster-framework/api-types';
 import { STEAM_KEYS_API } from '../urls';
+import { keysTargetParam, type KeysTarget } from './keys-target';
 import { toKeyItem, type KeyItem } from './keys-api';
 
 export async function fetchKeysDirect(
   sb: SbApi,
-  args: { appid: number; paymentId: string; storeCountry?: string | null },
+  args: { target: KeysTarget; paymentId: string; storeCountry?: string | null },
   signal?: AbortSignal,
 ): Promise<KeyItem[]> {
   try {
-    const q = new URLSearchParams({ paymentId: args.paymentId, appid: String(args.appid) });
+    // One query field per Steam id space — `appid` / `sub` / `bundle`; see
+    // lib/keys-target.ts. Sending the wrong one returns the wrong product's keys.
+    const q = new URLSearchParams({ paymentId: args.paymentId, [keysTargetParam(args.target)]: String(args.target.id) });
     if (args.storeCountry) q.set('store_country', args.storeCountry);
     const r = await sb.net.fetch(`${STEAM_KEYS_API}?${q.toString()}`, { method: 'GET', ...(signal ? { signal } : {}) });
     if (!r.ok) return [];

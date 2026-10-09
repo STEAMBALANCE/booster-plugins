@@ -52,7 +52,7 @@ const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 5));
 
 const item = (over: Partial<KeyItem> = {}): KeyItem => ({
   itemId: 1, name: 'Game X', isActive: true, regionLabel: 'Global',
-  packageId: 13533, productType: 'base', price: 129.58, oldPrice: 199, discountPercent: 35,
+  packageId: 13533, packageType: 'package', productType: 'base', price: 129.58, oldPrice: 199, discountPercent: 35,
   ...over,
 });
 
@@ -160,6 +160,43 @@ const oneBlockBody = `
           <input name="subid" value="13533">
         </div></div>
       </div>
+    </div>
+  </div>`;
+
+// Live /app/2300320 shape: the base game's edition block (subid) followed by two
+// bundle rows — each a `.game_area_purchase_game` inside a
+// `…_wrapper[data-ds-bundleid]`, carrying a hidden `bundleid` input and an action
+// row with TWO native clusters («Информация о наборе» + discount/cart).
+const bundleRow = (id: number): string => `
+  <div class="game_area_purchase_game_wrapper dynamic_bundle_description" data-ds-bundleid="${id}">
+    <div class="game_area_purchase_game_dropdown_subscription game_area_purchase_game">
+      <form name="add_bundle_to_cart_${id}"><input type="hidden" name="bundleid" value="${id}"></form>
+      <div class="game_purchase_action">
+        <div class="game_purchase_action_bg">
+          <div class="btn_addtocart btn_packageinfo"><a href="/bundle/${id}/">info</a></div>
+        </div>
+        <div class="game_purchase_action_bg">
+          <div class="discount_block game_purchase_discount" data-price-final="334075"></div>
+          <div class="btn_addtocart"><a href="javascript:addBundleToCart( ${id});">cart</a></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+const bundleBody = `
+  <div class="leftcol game_description_column">
+    <div id="game_area_purchase" class="game_area_purchase">
+      <div class="editions_purchase_options_container"><div class="game_area_purchase_game_wrapper">
+        <div class="game_area_purchase_game">
+          <form name="add_to_cart_825695"><input type="hidden" name="subid" value="825695"></form>
+          <div class="game_purchase_action"><div class="game_purchase_action_bg">
+            <div class="game_purchase_price price" data-price-final="195000">1950</div>
+            <div class="btn_addtocart"><a href="javascript:addToCart(825695);">cart</a></div>
+          </div></div>
+        </div>
+      </div></div>
+      ${bundleRow(56040)}
+      ${bundleRow(42206)}
     </div>
   </div>`;
 
@@ -275,6 +312,123 @@ describe('registerAppPage', () => {
     await tick();
     expect(keysClient.purchases.length).toBe(1);
     expect(keysClient.purchases[0]!.itemId).toBe(101);
+  });
+
+  test('normal page, bundle + package offers → a chip on every matching block', async () => {
+    const { sb, pageReg } = makeSbStub();
+    // Verbatim steam_keys?appid=2300320 answer: bundle 42206, bundle 56040,
+    // package 825695. The page also renders bundle 73995, which is NOT on offer.
+    const keysClient = makeKeysClient({ items: [
+      item({ itemId: 2266, name: 'FS25 - Year 1 Bundle', packageId: 42206, packageType: 'bundle' }),
+      item({ itemId: 2269, name: 'FS25 - Highlands', packageId: 56040, packageType: 'bundle' }),
+      item({ itemId: 2270, name: 'FS25', packageId: 825695, packageType: 'package' }),
+    ] });
+    registerAppPage(sb, { keysClient });
+    setBody(bundleBody);
+    await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/2300320/'));
+    await tick();
+    expect(document.querySelectorAll('.booster-eo').length).toBe(3);
+    expect(document.getElementById('booster-topup-bar')).toBeNull();
+    // Each chip landed in the block that sells that exact product.
+    expect(document.querySelector('[data-sb-keys-subid="825695"] .booster-eo')).not.toBeNull();
+    expect(document.querySelector('[data-ds-bundleid="42206"] [data-sb-keys-bundleid="42206"] .booster-eo')).not.toBeNull();
+    expect(document.querySelector('[data-ds-bundleid="56040"] [data-sb-keys-bundleid="56040"] .booster-eo')).not.toBeNull();
+    // The chip sits after both native clusters of the bundle's action row.
+    const action = document.querySelector('[data-ds-bundleid="42206"] .game_purchase_action')!;
+    expect(action.lastElementChild!.classList.contains('booster-eo')).toBe(true);
+    expect(action.querySelectorAll('.game_purchase_action_bg').length).toBe(2);
+  });
+
+  // fitChip: the bundle row's native cluster («Информация о наборе» + discount/cart)
+  // leaves too little room for the full chip, so it steps down through its compact
+  // levels. happy-dom has no layout engine, hence the injected measurement.
+  test('crowded action row → chip drops the discount badge (compact level 1)', async () => {
+    const { sb, pageReg } = makeSbStub();
+    // First read overflows, the read after level 1 fits.
+    const reads = [44, 0];
+    registerAppPage(sb, {
+      keysClient: makeKeysClient({ items: [item({ itemId: 2266, packageId: 42206, packageType: 'bundle' })] }),
+      measureOverflow: () => reads.shift() ?? 0,
+    });
+    setBody(bundleBody);
+    await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/2300320/'));
+    await tick();
+    const chip = document.querySelector('.booster-eo')!;
+    expect(chip.classList.contains('booster-eo--compact')).toBe(true);
+    expect(chip.classList.contains('booster-eo--tight')).toBe(false);
+    expect(chip.querySelector('.booster-eo-buy')).not.toBeNull();   // buy button always survives
+  });
+
+  test('still crowded after level 1 → chip also drops the struck price (level 2)', async () => {
+    const { sb, pageReg } = makeSbStub();
+    registerAppPage(sb, {
+      keysClient: makeKeysClient({ items: [item({ itemId: 2266, packageId: 42206, packageType: 'bundle' })] }),
+      measureOverflow: () => 80,
+    });
+    setBody(bundleBody);
+    await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/2300320/'));
+    await tick();
+    const chip = document.querySelector('.booster-eo')!;
+    expect(chip.classList.contains('booster-eo--compact')).toBe(true);
+    expect(chip.classList.contains('booster-eo--tight')).toBe(true);
+    expect(chip.querySelector('.booster-eo-now')).not.toBeNull();   // final price always survives
+  });
+
+  test('roomy action row → chip keeps the full design', async () => {
+    const { sb, pageReg } = makeSbStub();
+    registerAppPage(sb, {
+      keysClient: makeKeysClient({ items: [item({ itemId: 101, packageId: 13533 })] }),
+      measureOverflow: () => 0,
+    });
+    setBody(oneBlockBody);
+    await reg(pageReg).mount(mountCtx());
+    await tick();
+    const chip = document.querySelector('.booster-eo')!;
+    expect(chip.classList.contains('booster-eo--compact')).toBe(false);
+    expect(chip.querySelector('.booster-eo-discount')).not.toBeNull();
+  });
+
+  test('buy on a bundle chip purchases the bundle offer, not the base game', async () => {
+    const { sb, pageReg } = makeSbStub();
+    const keysClient = makeKeysClient({ items: [
+      item({ itemId: 2266, name: 'FS25 - Year 1 Bundle', packageId: 42206, packageType: 'bundle' }),
+      item({ itemId: 2270, name: 'FS25', packageId: 825695, packageType: 'package' }),
+    ] });
+    registerAppPage(sb, { keysClient });
+    setBody(bundleBody);
+    await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/2300320/'));
+    await tick();
+    (document.querySelector('[data-ds-bundleid="42206"] .booster-eo-buy') as HTMLButtonElement).click();
+    await tick();
+    expect(keysClient.purchases.map((p) => p.itemId)).toEqual([2266]);
+    expect(keysClient.purchases[0]!.titles!.title).toContain('FS25 - Year 1 Bundle');
+  });
+
+  test('bundle-only offer still counts as a match → no topup bar, no «СКОРО»', async () => {
+    const { sb, pageReg } = makeSbStub();
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [
+      item({ itemId: 2266, packageId: 42206, packageType: 'bundle' }),
+    ] }) });
+    setBody(bundleBody);
+    await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/2300320/'));
+    await tick();
+    expect(document.querySelectorAll('.booster-eo').length).toBe(1);
+    expect(document.querySelector('.booster-eo--soon')).toBeNull();
+    expect(document.getElementById('booster-topup-bar')).toBeNull();
+  });
+
+  test('bundle chip is removed on unmount, marker attribute included', async () => {
+    const { sb, pageReg } = makeSbStub();
+    registerAppPage(sb, { keysClient: makeKeysClient({ items: [
+      item({ itemId: 2266, packageId: 42206, packageType: 'bundle' }),
+    ] }) });
+    setBody(bundleBody);
+    const teardown = await reg(pageReg).mount(mountCtx('https://store.steampowered.com/app/2300320/'));
+    await tick();
+    teardown!();
+    expect(document.querySelector('.booster-eo')).toBeNull();
+    expect(document.querySelector('[data-sb-keys-bundleid]')).toBeNull();
+    expect(document.querySelector('.booster-dist-host')).toBeNull();
   });
 
   test('buy → purchaseKey carries game-scoped window titles (game name in heading, not in taskbar)', async () => {

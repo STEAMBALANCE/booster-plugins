@@ -12,7 +12,7 @@ beforeEach(() => {
   });
 });
 
-const base: KeyItem = { itemId: 7, name: 'Game X', isActive: true, regionLabel: 'Global', packageId: 13533, productType: 'base', price: 129.58, oldPrice: 199, discountPercent: 35 };
+const base: KeyItem = { itemId: 7, name: 'Game X', isActive: true, regionLabel: 'Global', packageId: 13533, packageType: 'package', productType: 'base', price: 129.58, oldPrice: 199, discountPercent: 35 };
 
 test('title + one row per item: name, region chip, price, discount, struck old price, buy', () => {
   const el = buildKeysBlock([base], { onBuy: () => {} });

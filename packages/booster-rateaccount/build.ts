@@ -4,6 +4,9 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync, watch } from 'node:
 import { resolve } from 'node:path';
 import { validatePluginMeta } from '@steambalance/booster-framework/testing';
 import { pluginMeta as baseMeta } from './src/plugin-meta';
+// Resolved here (Bun runtime, sees SB_FRONT_URL) and handed to the bundle as
+// a define — src/urls.ts has no other way to learn the origin once bundled.
+import { FRONT_ORIGIN } from './src/urls';
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
 // Version source-of-truth: package.json::version. NO env-var override —
@@ -33,6 +36,7 @@ async function buildOnce(): Promise<void> {
     define: {
       __SB_PLUGIN_VERSION__: JSON.stringify(version),
       __SB_PRODUCTION__:     JSON.stringify(isProd),
+      __SB_FRONT_ORIGIN__:   JSON.stringify(FRONT_ORIGIN),
     },
   });
 
