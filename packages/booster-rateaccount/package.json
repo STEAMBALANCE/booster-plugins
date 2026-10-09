@@ -1,6 +1,6 @@
 {
   "name": "@booster-plugins/booster-rateaccount",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "private": true,
   "type": "module",
   "scripts": {
