@@ -4,6 +4,9 @@ import { installMain } from './main/install';
 declare const sb: { plugins: { register: (m: unknown) => void } };
 declare const __SB_PLUGIN_VERSION__: string;
 
+// Supernav button is hidden for now; flip to true to bring it back.
+const SUPERNAV_BUTTON_ENABLED = false;
+
 sb.plugins.register({
   id: 'booster-rateaccount',
   version: __SB_PLUGIN_VERSION__,
@@ -13,7 +16,7 @@ sb.plugins.register({
   contextKinds: [ContextKind.Main],
   capabilities: [Capability.Ui, Capability.Steam],
   async init(ctx: PluginContext): Promise<() => void> {
-    if (ctx.contextKind !== ContextKind.Main) return () => {};
+    if (ctx.contextKind !== ContextKind.Main || !SUPERNAV_BUTTON_ENABLED) return () => {};
     return installMain(ctx);
   },
 });
