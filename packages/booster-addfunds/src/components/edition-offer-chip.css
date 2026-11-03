@@ -55,6 +55,12 @@
 /* Single visible price line → same treatment as .booster-eo--single. */
 .booster-eo--tight .booster-eo-now { font-size: 14px; margin-top: 0; }
 
+/* Stacked under a native purchase cluster (wishlist row: Steam's price +
+ * «Добавить в корзину» above, our chip below in the same right-aligned column).
+ * 6px matches the mock QA'd in-Steam; the row has a fixed height, so the column
+ * grows upward into empty space instead of pushing the next row down. */
+.booster-eo.booster-eo--stacked { margin-top: 6px; }
+
 /* Inactive item ("Скоро в продаже"): muted label, no buy button. */
 .booster-eo--inactive { padding: 7px 12px; }
 .booster-eo .booster-eo-inactive-label {

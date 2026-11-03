@@ -55,6 +55,7 @@ export interface PurchaseMountDeps {
 export interface PurchaseMounter {
   runPurchase(item: KeyItem, handle: PurchaseHandle): Promise<void>;
   mountChip(block: HTMLElement, item: KeyItem): (() => void) | null;
+  appendChip(host: HTMLElement, item: KeyItem): () => void;
   mountComingSoonChip(block: HTMLElement): (() => void) | null;
   mountTopupBar(col: HTMLElement): (() => void) | null;
   mountKeysBlockAfter(anchor: HTMLElement, items: KeyItem[]): (() => void) | null;
@@ -140,6 +141,24 @@ export function createPurchaseMounter(sb: SbApi, deps: PurchaseMountDeps): Purch
     };
   }
 
+  // Mount the offer chip as the last child of a host Steam lays out itself — the
+  // wishlist row's purchase column, a right-aligned flex column, so the chip
+  // stacks under Steam's own price + «Добавить в корзину». Unlike mountChip the
+  // host is left as Steam built it (no booster-dist-host flex rewrite), so the
+  // id marker rides on the chip itself.
+  function appendChip(host: HTMLElement, item: KeyItem): () => void {
+    ensureEditionOfferStyles();
+    const chip = buildEditionOfferChip({ item, onBuy: () => void runPurchase(item, chip) });
+    chip.root.classList.add('booster-eo--stacked');
+    const idAttr = item.packageType === 'bundle' ? 'sbKeysBundleid' : 'sbKeysSubid';
+    if (item.packageId != null) chip.root.dataset[idAttr] = String(item.packageId);
+    host.appendChild(chip.root);
+    return () => {
+      try { chip.root.remove(); } catch { /* detached */ }
+      if (document.querySelectorAll('.booster-eo').length === 0) document.getElementById('booster-edition-offer-style')?.remove();
+    };
+  }
+
   // Empty-state «СКОРО» chip — same host wiring as mountChip but a dimmed no-op
   // button. Also a `.booster-eo`, so the refcounted style teardown covers it.
   function mountComingSoonChip(block: HTMLElement): (() => void) | null {
@@ -206,5 +225,5 @@ export function createPurchaseMounter(sb: SbApi, deps: PurchaseMountDeps): Purch
     };
   }
 
-  return { runPurchase, mountChip, mountComingSoonChip, mountTopupBar, mountKeysBlockAfter };
+  return { runPurchase, mountChip, appendChip, mountComingSoonChip, mountTopupBar, mountKeysBlockAfter };
 }

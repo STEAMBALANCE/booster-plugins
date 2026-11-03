@@ -29,7 +29,9 @@ export function createKeysClient(sb: SbApi, opts: {
   let counter = 0;
   const nextId = (): string => `${nonce}:${++counter}`;
 
-  let activeListReqId: string | null = null;
+  // One waiter per in-flight list request, keyed by reqId — several may be in
+  // flight at once (the wishlist asks about every visible app), so a response
+  // is routed to its own waiter; one for a reqId we no longer wait on is dropped.
   const listWaiters = new Map<string, (items: KeyItem[]) => void>();
   const purchaseWaiters = new Map<string, (r: { status: 'ok' | 'email-required' | 'error'; error?: string; message?: string }) => void>();
   const onReady: Array<() => void> = [];
@@ -37,7 +39,7 @@ export function createKeysClient(sb: SbApi, opts: {
   const subs: Array<() => void> = [];
   subs.push(sb.bus.subscribe('booster-checkout.keys.response', (data) => {
     const d = data as { reqId?: string; items?: unknown };
-    if (!d || typeof d.reqId !== 'string' || d.reqId !== activeListReqId) return;
+    if (!d || typeof d.reqId !== 'string') return;
     const w = listWaiters.get(d.reqId);
     if (w) { listWaiters.delete(d.reqId); w(Array.isArray(d.items) ? d.items as KeyItem[] : []); }
   }));
@@ -82,17 +84,27 @@ export function createKeysClient(sb: SbApi, opts: {
 
   function requestKeysViaBus(target: KeysTarget, signal: AbortSignal): Promise<KeyItem[]> {
     const reqId = nextId();
-    activeListReqId = reqId;
     return new Promise<KeyItem[]>((resolve) => {
       let done = false;
-      const finish = (items: KeyItem[]): void => { if (done) return; done = true; clearInterval(iv); clearTimeout(to); listWaiters.delete(reqId); resolve(items); };
+      // Unhooks its onReady entry and abort listener too: the wishlist issues one
+      // request per app, so leftovers would pile up for the whole page view.
+      const finish = (items: KeyItem[]): void => {
+        if (done) return;
+        done = true;
+        clearInterval(iv); clearTimeout(to); listWaiters.delete(reqId);
+        const i = onReady.indexOf(send);
+        if (i >= 0) onReady.splice(i, 1);
+        signal.removeEventListener('abort', onAbort);
+        resolve(items);
+      };
+      const onAbort = (): void => finish([]);
       listWaiters.set(reqId, finish);
       const send = (): void => { if (!done) sb.bus.publish('booster-addfunds.keys.request', { reqId, [keysTargetParam(target)]: target.id }); };
       onReady.push(send);
       send();
       const iv = setInterval(send, retryMs);
       const to = setTimeout(() => finish([]), timeoutMs);
-      signal.addEventListener('abort', () => finish([]), { once: true });
+      signal.addEventListener('abort', onAbort, { once: true });
     });
   }
 

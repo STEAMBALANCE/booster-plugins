@@ -49,11 +49,18 @@ export function readBlockBundleId(block: HTMLElement): number | null {
   return toId(block.closest('[data-ds-bundleid]')?.getAttribute('data-ds-bundleid'));
 }
 
-// Pair each purchase block with the offer that sells exactly that product.
-// Matching is id-space aware: a 'bundle' offer may only pair with a block's
-// bundle id and a 'package' offer only with its sub id — the two spaces overlap
+// The offer that sells exactly the product addressed by `subid` / `bundleId`.
+// Matching is id-space aware: a 'bundle' offer may only pair with a bundle id
+// and a 'package' offer only with a sub id — the two spaces overlap
 // numerically, so an id-only match could sell the wrong product. An offer with
 // no packageType (pre-bundle backend) keeps the legacy sub-id behaviour.
+export function findOffer(items: KeyItem[], subid: number | null, bundleId: number | null): KeyItem | null {
+  return items.find((it) => it.packageId != null && (
+    it.packageType === 'bundle' ? it.packageId === bundleId : it.packageId === subid
+  )) ?? null;
+}
+
+// Pair each purchase block with the offer that sells exactly that product.
 export function matchItemsToBlocks(
   items: KeyItem[], blocks: HTMLElement[],
 ): Array<{ block: HTMLElement; item: KeyItem }> {
@@ -62,9 +69,7 @@ export function matchItemsToBlocks(
     const subid = readBlockSubid(block);
     const bundleId = readBlockBundleId(block);
     if (subid == null && bundleId == null) continue;
-    const item = items.find((it) => it.packageId != null && (
-      it.packageType === 'bundle' ? it.packageId === bundleId : it.packageId === subid
-    ));
+    const item = findOffer(items, subid, bundleId);
     if (item) out.push({ block, item });
   }
   return out;

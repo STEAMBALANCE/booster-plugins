@@ -33,6 +33,25 @@ test('requestKeys ignores stale reqId then times out → []', async () => {
   client.dispose();
 });
 
+// The wishlist page asks about several apps at once. Each in-flight bus request
+// must resolve with ITS answer — a newer request must not orphan an older one
+// (which would then fall through to the timeout with []).
+test('concurrent requestKeys calls each resolve with their own response', async () => {
+  const bus = makeBus(); const sb = { bus } as any;
+  const client = createKeysClient(sb, { timeoutMs: 300, retryMs: 1000 });
+  const pA = client.requestKeys({ kind: 'app', id: 10 }, new AbortController().signal);
+  const pB = client.requestKeys({ kind: 'app', id: 20 }, new AbortController().signal);
+  await new Promise((r) => setTimeout(r, 5));
+  const reqs = bus.published.filter((x) => x.topic === 'booster-addfunds.keys.request');
+  const reqA = reqs.find((x) => x.data.appid === 10)!;
+  const reqB = reqs.find((x) => x.data.appid === 20)!;
+  bus.emit('booster-checkout.keys.response', { reqId: reqA.data.reqId, appid: 10, items: [{ itemId: 1 }] });
+  bus.emit('booster-checkout.keys.response', { reqId: reqB.data.reqId, appid: 20, items: [{ itemId: 2 }] });
+  expect(await pA).toEqual([{ itemId: 1 }]);
+  expect(await pB).toEqual([{ itemId: 2 }]);
+  client.dispose();
+});
+
 test('purchaseKey → email-required then ok', async () => {
   const bus = makeBus(); const sb = { bus } as any;
   const client = createKeysClient(sb, { timeoutMs: 500, retryMs: 100 });
