@@ -813,6 +813,52 @@ describe('registerAppPage', () => {
       });
     });
 
+    // RU-only gate: the carousel is for RU-store accounts. Any other store
+    // country hides it — including a still-valid cache from an earlier RU
+    // session — and skips the backend fetch entirely.
+    test('non-RU store country (KZ) + stale cache → no block, no fetch', async () => {
+      const { sb, pageReg } = makeSbStub();
+      sb.steam.getStoreCountry = async () => 'KZ';
+      const NOW = 1_700_000_000_000;
+      const STALE = NOW - TTL_MS - 1000;
+      window.localStorage.setItem(CACHE_KEY, JSON.stringify({
+        items: [{ link: 'https://steambalance.cc/x', cover: 'https://cdn/x.jpg' }],
+        fetchedAt: STALE,
+        attemptedAt: STALE,
+      }));
+      let fetched = false;
+      registerAppPage(sb, {
+        keysClient: makeKeysClient({ items: [] }),
+        now: () => NOW,
+        fetchCatalogue: async () => { fetched = true; return { status: 'ok', items: [{ link: 'https://steambalance.cc/a', cover: 'https://cdn/a.jpg' }] }; },
+      });
+      setBody(editionBody);
+      await reg(pageReg).mount(mountCtx());
+      await tick();
+      // Count, not toBeNull(): on failure bun would pretty-print the whole
+      // happy-dom node graph (tens of MB) and stall the run.
+      expect(document.querySelectorAll('#booster-region-games').length).toBe(0);
+      expect(fetched).toBe(false);
+    });
+
+    // Unknown country (signed out, brand-new account before the first capture,
+    // bridge failure) is treated as non-RU: strict "RU only".
+    test('unknown store country + no cache → no block, no fetch', async () => {
+      const { sb, pageReg } = makeSbStub();
+      sb.steam.getStoreCountry = async () => undefined;
+      let fetched = false;
+      registerAppPage(sb, {
+        keysClient: makeKeysClient({ items: [] }),
+        now: () => 1_700_000_000_000,
+        fetchCatalogue: async () => { fetched = true; return { status: 'ok', items: [{ link: 'https://steambalance.cc/a', cover: 'https://cdn/a.jpg' }] }; },
+      });
+      setBody(editionBody);
+      await reg(pageReg).mount(mountCtx());
+      await tick();
+      expect(document.querySelectorAll('#booster-region-games').length).toBe(0);
+      expect(fetched).toBe(false);
+    });
+
     test('region-locked page never invokes mountRegionGames (no fetch, no block)', async () => {
       const { sb, pageReg } = makeSbStub();
       let called = false;

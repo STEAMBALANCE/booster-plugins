@@ -116,7 +116,8 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
     return () => { for (const t of teardowns) t(); };
   }
 
-  // Region-games carousel ("Игры недоступные в регионе") — anchored as the
+  // Region-games carousel ("Игры недоступные в регионе") — RU-store accounts
+  // only (see the gate inside). Anchored as the
   // first child of the RIGHT META column (`.rightcol.game_meta_data`, the one
   // holding "Может ли эта игра вам понравиться?"), fed by catalogue-api's fetch
   // + 10-min localStorage cache. NB: an /app/ page has multiple `.rightcol`
@@ -134,6 +135,15 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
       );
       if (!col || ctx.signal.aborted) return;
       if (document.getElementById('booster-region-games')) return;
+      // RU-only: the carousel is shown to RU-store accounts and nobody else.
+      // Gated BEFORE any render (cache included — the cache isn't keyed by
+      // account, so an earlier RU session's items must not leak to a KZ one)
+      // and before any fetch. Unknown country (signed out, a brand-new account
+      // before its first store-country capture, bridge failure) counts as
+      // non-RU. getStoreCountry is a native-cache read — fast once the steamId
+      // is known, bounded ~3s on a cold steamId.
+      const country = (await sb.steam?.getStoreCountry?.())?.toUpperCase() ?? null;
+      if (ctx.signal.aborted || country !== 'RU') return;
       const now = (deps.now ?? (() => Date.now()))();
       const cache = readCache();
       const d = decide(now, cache);
@@ -152,15 +162,10 @@ export function registerAppPage(sb: SbApi, deps: AppPageDeps = {}): void {
       };
       if (d.render) insert(d.render);
       if (d.shouldFetch) {
-        // Region from the store country, currency from the user snapshot — both
-        // normalized to the ISO upper-case the backend contract expects. Either
-        // may be unknown (cold snapshot / no Steam cap); fetchCatalogue omits
-        // whichever is missing rather than sending it blank.
-        // getStoreCountry is internally bounded (~3s on a cold steamId) and only
-        // gates the FIRST carousel appearance when there's no cache; cached
-        // renders above are synchronous. One-time, acceptable — not worth
-        // shipping the carousel region-blind to shave a cold-start second.
-        const country = (await sb.steam?.getStoreCountry?.())?.toUpperCase() ?? null;
+        // Region = the store country resolved by the RU gate above; currency
+        // from the user snapshot, upper-cased to the ISO form the backend
+        // contract expects. Currency may be unknown (cold snapshot) —
+        // fetchCatalogue omits it rather than sending it blank.
         const currency = snap.get()?.currency?.toUpperCase() ?? null;
         const res = await fetchCatalogue(sb, { country, currency, signal: ctx.signal });
         if (ctx.signal.aborted) return teardown;
