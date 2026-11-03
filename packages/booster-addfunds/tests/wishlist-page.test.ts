@@ -12,7 +12,8 @@
 // option Steam's own button sells.
 //
 // happy-dom runs no React; the fiber is faked with the same expando shape
-// (`__reactFiber$<rand>` → { memoizedProps, return }) React leaves on a node.
+// (`__reactFiber$<rand>` → { memoizedProps, return, alternate }) React leaves
+// on a node.
 // DOM changes are signalled through the page's `watchDom` seam by hand
 // (`dom.changed()`): happy-dom 20 holds a MutationObserver callback through a
 // WeakRef, so a real observer goes silent after the first GC.
@@ -92,15 +93,23 @@ const ROAD96: RowSpec = { appid: 1466640, index: 1, name: 'Road 96', option: { p
 const ELDEN: RowSpec = { appid: 1245620, index: 4, name: 'ELDEN RING', option: { packageid: 440408, formatted_final_price: '3599 руб' } };
 const CYBERPUNK: RowSpec = { appid: 1091500, index: 0, name: 'Cyberpunk 2077' };
 
+interface FakeFiber { memoizedProps: unknown; return: FakeFiber | null; alternate?: FakeFiber | null }
+
+const FIBER_KEY = '__reactFiber$q1w2e3';
+
 // The live React shape around a row's purchase column: the column's own fiber
 // (a host div) → `th` { wishlistItem, item, narrowLayout } → … → the row.
 // `item` is the StoreItem whose best_purchase_option Steam's button sells.
+function fiberChain(row: RowSpec): FakeFiber {
+  const item = { item_type: 0, id: row.appid, appid: row.appid, name: row.name, best_purchase_option: { ...row.option, package_group: 'default' } };
+  const rowFiber: FakeFiber = { memoizedProps: { appid: row.appid, item }, return: null };
+  const thFiber: FakeFiber = { memoizedProps: { wishlistItem: { appid: row.appid, priority: row.index }, item, narrowLayout: false }, return: rowFiber };
+  return { memoizedProps: { className: '_5obTMJByPr0-' }, return: thFiber };
+}
+
 function attachFiberTo(col: HTMLElement, row: RowSpec): void {
   if (!row.option) return;
-  const item = { item_type: 0, id: row.appid, appid: row.appid, name: row.name, best_purchase_option: { ...row.option, package_group: 'default' } };
-  const rowFiber = { memoizedProps: { appid: row.appid, item }, return: null };
-  const thFiber = { memoizedProps: { wishlistItem: { appid: row.appid, priority: row.index }, item, narrowLayout: false }, return: rowFiber };
-  (col as unknown as Record<string, unknown>)['__reactFiber$q1w2e3'] = { memoizedProps: { className: '_5obTMJByPr0-' }, return: thFiber };
+  (col as unknown as Record<string, unknown>)[FIBER_KEY] = fiberChain(row);
 }
 
 function attachFiber(row: RowSpec): void {
@@ -120,11 +129,22 @@ function rerenderColumn(row: RowSpec): void {
 }
 
 // A virtualizer keyed by index updating a row element in place for another app:
-// same row + column elements, new draggable id and React props.
+// same row + column elements, new draggable id and React props. As React does
+// it: the update is rendered into the `alternate` of every fiber on the path
+// and the DOM node is never re-pointed, so the column's own fiber chain still
+// describes the previous app — the new props sit one `alternate` hop away.
+// (React stamps a node once, at creation; after every other update the stamp
+// is the stale half of the current/alternate pair.)
 function reuseRow(from: RowSpec, to: RowSpec): void {
   const el = rowEl(from);
   el.setAttribute('data-rfd-draggable-id', `WishlistItem-${to.appid}-${from.index}`);
-  attachFiberTo(el.querySelector<HTMLElement>('._5obTMJByPr0-')!, to);
+  const col = el.querySelector<HTMLElement>('._5obTMJByPr0-')!;
+  let stale = (col as unknown as Record<string, FakeFiber | null>)[FIBER_KEY] ?? null;
+  let fresh: FakeFiber | null = fiberChain(to);
+  for (; stale && fresh; stale = stale.return, fresh = fresh.return) {
+    stale.alternate = fresh;
+    fresh.alternate = stale;
+  }
 }
 
 function listHtml(rows: RowSpec[]): string {
@@ -162,22 +182,30 @@ interface KeysClientOpts {
   defer?: boolean;
   /** Reject every request (a client that throws). */
   fail?: boolean;
+  /** Answer each app's first N lookups with null — no answer, as a timed-out
+   *  bus request or a failed fetch does (see keys-client queryKeys). */
+  unanswered?: number;
 }
 
 function makeKeysClient(byApp: Record<number, KeyItem[]>, opts: KeysClientOpts = {}) {
   const purchases: number[] = [];
   const targets: KeysTarget[] = [];
   const held = new Map<number, () => void>();
+  const asked = new Map<number, number>();
+  const queryKeys = (target: KeysTarget): Promise<KeyItem[] | null> => {
+    targets.push(target);
+    if (opts.fail) return Promise.reject(new Error('keys backend down'));
+    const n = (asked.get(target.id) ?? 0) + 1;
+    asked.set(target.id, n);
+    const answer = n <= (opts.unanswered ?? 0) ? null : byApp[target.id] ?? [];
+    if (!opts.defer) return Promise.resolve(answer);
+    return new Promise((r) => held.set(target.id, () => r(answer)));
+  };
   return {
     purchases,
     targets,
-    requestKeys: (target: KeysTarget): Promise<KeyItem[]> => {
-      targets.push(target);
-      if (opts.fail) return Promise.reject(new Error('keys backend down'));
-      const answer = byApp[target.id] ?? [];
-      if (!opts.defer) return Promise.resolve(answer);
-      return new Promise((r) => held.set(target.id, () => r(answer)));
-    },
+    queryKeys,
+    requestKeys: (target: KeysTarget): Promise<KeyItem[]> => queryKeys(target).then((items) => items ?? []),
     purchaseKey: async (itemId: number): Promise<PurchaseResult> => { purchases.push(itemId); return { status: 'ok' }; },
     dispose(): void {},
     release: async (appid: number): Promise<void> => { held.get(appid)?.(); held.delete(appid); await wait(); },
@@ -217,14 +245,14 @@ function makeDomWatch() {
   };
 }
 
-async function mountWishlist(rows: RowSpec[], byApp: Record<number, KeyItem[]>, opts: KeysClientOpts = {}) {
+async function mountWishlist(rows: RowSpec[], byApp: Record<number, KeyItem[]>, opts: KeysClientOpts & { retryDelayMs?: number } = {}) {
   installDom(WISHLIST_URL);
   document.body.innerHTML = listHtml(rows);
   for (const r of rows) attachFiber(r);
   const stub = makeSbStub();
   const keysClient = makeKeysClient(byApp, opts);
   const dom = makeDomWatch();
-  registerWishlistPage(stub.sb, { keysClient, scanDelayMs: 0, watchDom: dom.watch });
+  registerWishlistPage(stub.sb, { keysClient, scanDelayMs: 0, retryDelayMs: opts.retryDelayMs ?? 0, watchDom: dom.watch });
   const ctrl = new AbortController();
   teardown = await reg(stub.pageReg).mount({ url: new URL(WISHLIST_URL), signal: ctrl.signal });
   await wait();
@@ -377,6 +405,18 @@ describe('registerWishlistPage — live list', () => {
     expect(row.querySelector('[data-sb-keys-subid="440408"]')).not.toBeNull();
   });
 
+  // React swapping the column's last child for an element of another type (the
+  // cart button turning into an «in cart» badge, say) appends the new one —
+  // after our chip, which would then sit above Steam's control.
+  test('the chip moves back under an element React appends after it', async () => {
+    const { dom } = await mountWishlist([ROAD96], { 1466640: [roadKey()] });
+    const col = rowEl(ROAD96).querySelector<HTMLElement>('._5obTMJByPr0-')!;
+    col.appendChild(document.createElement('div')).className = 'in-cart';
+    await dom.changed();
+    expect(col.lastElementChild?.classList.contains('booster-eo')).toBe(true);
+    expect(col.querySelectorAll('.booster-eo').length).toBe(1);
+  });
+
   test('a row never carries two chips', async () => {
     const { dom } = await mountWishlist([ROAD96], { 1466640: [roadKey()] });
     // React touching the row (e.g. a category tag added) triggers a rescan.
@@ -428,6 +468,50 @@ describe('registerWishlistPage — keys requests', () => {
     const { dom } = await mountWishlist([ROAD96], { 1466640: [roadKey()] }, { fail: true });
     await dom.changed();
     expect(chipIn(ROAD96)).toBeNull();
+  });
+});
+
+// A lookup can come back empty-handed — the bus timed out on a cold start
+// (checkout's main shell not up yet), the backend failed. That is not "no
+// keys": remembering it as [] would leave the row bare until a reload.
+describe('registerWishlistPage — lookups that got no answer', () => {
+  test('a lookup that got no answer is asked again, and the chip appears', async () => {
+    const { keysClient } = await mountWishlist([ROAD96], { 1466640: [roadKey()] }, { unanswered: 1 });
+    await wait();
+    expect(keysClient.targets.length).toBe(2);
+    expect(rowEl(ROAD96).querySelectorAll('.booster-eo').length).toBe(1);
+  });
+
+  // Asking again on every DOM change would hammer a backend that is down.
+  test('it is asked again only after a pause, not on the next page change', async () => {
+    const { keysClient, dom } = await mountWishlist([ROAD96], { 1466640: [roadKey()] }, { unanswered: 1, retryDelayMs: 150 });
+    await dom.changed();
+    expect(keysClient.targets.length).toBe(1);
+    await wait(200);
+    expect(keysClient.targets.length).toBe(2);
+    expect(rowEl(ROAD96).querySelectorAll('.booster-eo').length).toBe(1);
+  });
+
+  test('gives up after three lookups without an answer', async () => {
+    const { keysClient } = await mountWishlist([ROAD96], { 1466640: [roadKey()] }, { unanswered: Infinity });
+    await wait(60);
+    expect(keysClient.targets.length).toBe(3);
+  });
+
+  test('an empty answer is final — the row is not asked again', async () => {
+    const { keysClient, dom } = await mountWishlist([ROAD96], {});
+    await wait();
+    await dom.changed();
+    expect(keysClient.targets.length).toBe(1);
+  });
+
+  test('teardown during the pause cancels the next lookup', async () => {
+    const { keysClient, dom } = await mountWishlist([ROAD96], { 1466640: [roadKey()] }, { unanswered: 1, retryDelayMs: 60 });
+    (teardown as () => void)();
+    teardown = undefined;
+    await wait(100);
+    await dom.changed();
+    expect(keysClient.targets.length).toBe(1);
   });
 });
 

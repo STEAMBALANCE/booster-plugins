@@ -62,7 +62,7 @@ export function findPurchaseColumn(row: HTMLElement): HTMLElement | null {
 // into unrelated ancestors.
 const FIBER_MAX_DEPTH = 12;
 
-interface Fiber { memoizedProps?: unknown; return?: Fiber | null }
+interface Fiber { memoizedProps?: unknown; return?: Fiber | null; alternate?: Fiber | null }
 
 function fiberOf(el: HTMLElement): Fiber | null {
   const key = Object.keys(el).find((k) => k.startsWith('__reactFiber$'));
@@ -82,16 +82,27 @@ function optionOf(v: unknown, appid: number): PurchaseOption | null {
   return bundle != null ? { kind: 'bundle', id: bundle } : null;
 }
 
+function optionInProps(fiber: Fiber | null | undefined, appid: number): PurchaseOption | null {
+  const props = fiber?.memoizedProps;
+  if (!props || typeof props !== 'object') return null;
+  for (const v of Object.values(props as Record<string, unknown>)) {
+    const opt = optionOf(v, appid);
+    if (opt) return opt;
+  }
+  return null;
+}
+
 /** What Steam's button under `from` (the purchase column) sells for `appid`. */
 export function readPurchaseOption(from: HTMLElement, appid: number): PurchaseOption | null {
   let fiber = fiberOf(from);
   for (let depth = 0; fiber && depth < FIBER_MAX_DEPTH; depth++, fiber = fiber.return ?? null) {
-    const props = fiber.memoizedProps;
-    if (!props || typeof props !== 'object') continue;
-    for (const v of Object.values(props as Record<string, unknown>)) {
-      const opt = optionOf(v, appid);
-      if (opt) return opt;
-    }
+    // React stamps a node with the fiber it was created with and never
+    // re-points it, while every update flips which half of the
+    // current/alternate pair is live. So after every other update the stamped
+    // chain is stale — a row React reused for another app still describes the
+    // previous one there. Read both halves; the appid check keeps the right one.
+    const opt = optionInProps(fiber, appid) ?? optionInProps(fiber.alternate, appid);
+    if (opt) return opt;
   }
   return null;
 }

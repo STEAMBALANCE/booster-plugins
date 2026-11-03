@@ -28,7 +28,7 @@ test('keeps bundle offers apart from package offers via package.type', async () 
   ] } };
   const sb = makeSb(async () => ({ ok: true, json: async () => body }));
   const items = await fetchKeysDirect(sb, { target: { kind: 'app', id: 2300320 }, paymentId: 'p' });
-  expect(items.map((i) => [i.packageType, i.packageId])).toEqual([['bundle', 42206], ['package', 825695]]);
+  expect(items!.map((i) => [i.packageType, i.packageId])).toEqual([['bundle', 42206], ['package', 825695]]);
 });
 
 test('omits store_country from the query when not provided', async () => {
@@ -44,22 +44,24 @@ test('empty items array is a valid final answer, not a failure', async () => {
   expect(items).toEqual([]);
 });
 
-test('returns [] when the response is !ok', async () => {
+// A failure is no answer (null), not "no keys" ([]): the wishlist asks again
+// after one, while it keeps an empty answer for the whole page view.
+test('returns null (no answer) when the response is !ok', async () => {
   const sb = makeSb(async () => ({ ok: false, json: async () => ({}) }));
   const items = await fetchKeysDirect(sb, { target: { kind: 'app', id: 1 }, paymentId: 'p' });
-  expect(items).toEqual([]);
+  expect(items).toBeNull();
 });
 
-test('returns [] on a malformed body (no data.items array)', async () => {
+test('returns null (no answer) on a malformed body (no data.items array)', async () => {
   const sb = makeSb(async () => ({ ok: true, json: async () => ({ success: true }) }));
   const items = await fetchKeysDirect(sb, { target: { kind: 'app', id: 1 }, paymentId: 'p' });
-  expect(items).toEqual([]);
+  expect(items).toBeNull();
 });
 
-test('never throws — swallows network / json-parse errors', async () => {
+test('never throws — a network / json-parse error is no answer (null)', async () => {
   const sb = makeSb(async () => { throw new Error('network down'); });
   const items = await fetchKeysDirect(sb, { target: { kind: 'app', id: 1 }, paymentId: 'p' });
-  expect(items).toEqual([]);
+  expect(items).toBeNull();
 });
 
 // --- keys target (app / sub / bundle) ---------------------------------------

@@ -32,16 +32,19 @@ export function createKeysClient(sb: SbApi, opts: {
   // One waiter per in-flight list request, keyed by reqId — several may be in
   // flight at once (the wishlist asks about every visible app), so a response
   // is routed to its own waiter; one for a reqId we no longer wait on is dropped.
-  const listWaiters = new Map<string, (items: KeyItem[]) => void>();
+  const listWaiters = new Map<string, (items: KeyItem[] | null) => void>();
   const purchaseWaiters = new Map<string, (r: { status: 'ok' | 'email-required' | 'error'; error?: string; message?: string }) => void>();
   const onReady: Array<() => void> = [];
 
   const subs: Array<() => void> = [];
   subs.push(sb.bus.subscribe('booster-checkout.keys.response', (data) => {
-    const d = data as { reqId?: string; items?: unknown };
+    const d = data as { reqId?: string; items?: unknown; error?: unknown };
     if (!d || typeof d.reqId !== 'string') return;
     const w = listWaiters.get(d.reqId);
-    if (w) { listWaiters.delete(d.reqId); w(Array.isArray(d.items) ? d.items as KeyItem[] : []); }
+    if (!w) return;
+    listWaiters.delete(d.reqId);
+    // An `error` (e.g. 'no-payment') means checkout couldn't look: no answer.
+    w(d.error != null ? null : Array.isArray(d.items) ? d.items as KeyItem[] : []);
   }));
   subs.push(sb.bus.subscribe('booster-checkout.keys.email-required', (data) => {
     const d = data as { reqId?: string };
@@ -65,7 +68,11 @@ export function createKeysClient(sb: SbApi, opts: {
   // (cold start / no usable payment method) or if the direct fetch itself
   // throws — fetchKeysDirect is designed to never throw, so this catch is
   // belt-and-suspenders, not a normally-taken path.
-  function requestKeys(target: KeysTarget, signal: AbortSignal): Promise<KeyItem[]> {
+  //
+  // null = no answer: the direct fetch failed, the bus request timed out or was
+  // aborted, or checkout reported it couldn't look. The wishlist asks again
+  // after one, unlike after [] ("no keys"). Never rejects.
+  function queryKeys(target: KeysTarget, signal: AbortSignal): Promise<KeyItem[] | null> {
     const cfg = opts.keysConfig?.get();
     if (cfg && cfg.paymentId) {
       // NOTE: sb.net doesn't wire AbortSignal in v1 (NetFetchInit.signal is a
@@ -82,13 +89,18 @@ export function createKeysClient(sb: SbApi, opts: {
     return requestKeysViaBus(target, signal);
   }
 
-  function requestKeysViaBus(target: KeysTarget, signal: AbortSignal): Promise<KeyItem[]> {
+  // The /app/ and package pages' view: a failed lookup shows as "no keys".
+  function requestKeys(target: KeysTarget, signal: AbortSignal): Promise<KeyItem[]> {
+    return queryKeys(target, signal).then((items) => items ?? []);
+  }
+
+  function requestKeysViaBus(target: KeysTarget, signal: AbortSignal): Promise<KeyItem[] | null> {
     const reqId = nextId();
-    return new Promise<KeyItem[]>((resolve) => {
+    return new Promise<KeyItem[] | null>((resolve) => {
       let done = false;
       // Unhooks its onReady entry and abort listener too: the wishlist issues one
       // request per app, so leftovers would pile up for the whole page view.
-      const finish = (items: KeyItem[]): void => {
+      const finish = (items: KeyItem[] | null): void => {
         if (done) return;
         done = true;
         clearInterval(iv); clearTimeout(to); listWaiters.delete(reqId);
@@ -97,13 +109,13 @@ export function createKeysClient(sb: SbApi, opts: {
         signal.removeEventListener('abort', onAbort);
         resolve(items);
       };
-      const onAbort = (): void => finish([]);
+      const onAbort = (): void => finish(null);
       listWaiters.set(reqId, finish);
       const send = (): void => { if (!done) sb.bus.publish('booster-addfunds.keys.request', { reqId, [keysTargetParam(target)]: target.id }); };
       onReady.push(send);
       send();
       const iv = setInterval(send, retryMs);
-      const to = setTimeout(() => finish([]), timeoutMs);
+      const to = setTimeout(() => finish(null), timeoutMs);
       signal.addEventListener('abort', onAbort, { once: true });
     });
   }
@@ -130,5 +142,5 @@ export function createKeysClient(sb: SbApi, opts: {
     });
   }
 
-  return { requestKeys, purchaseKey, dispose: () => { for (const u of subs) u(); } };
+  return { requestKeys, queryKeys, purchaseKey, dispose: () => { for (const u of subs) u(); } };
 }

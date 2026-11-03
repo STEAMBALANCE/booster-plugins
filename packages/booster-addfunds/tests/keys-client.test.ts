@@ -252,3 +252,79 @@ test('requestKeys hands the whole target to the direct fetch', async () => {
   expect(directArgs).toEqual({ target: { kind: 'bundle', id: 42206 }, paymentId: 'paypalych-sbp', storeCountry: 'RU' });
   client.dispose();
 });
+
+// --- no answer vs no keys ----------------------------------------------------
+// queryKeys tells a failed lookup (null — worth asking again) from "no keys for
+// this product" ([] — a final answer). requestKeys keeps folding both into [],
+// so the /app/ and package pages behave as before.
+
+test('requestKeys: a failed direct fetch still resolves [] — no bus fallback', async () => {
+  const bus = makeBus(); const sb = { bus } as any;
+  const keysConfig = { get: () => ({ paymentId: 'paypalych-sbp', storeCountry: 'RU' }) };
+  const fetchKeysDirect = async () => null;
+  const client = createKeysClient(sb, { timeoutMs: 500, retryMs: 100, keysConfig, fetchKeysDirect } as any);
+  const items = await client.requestKeys({ kind: 'app', id: 1909950 }, new AbortController().signal);
+  expect(items).toEqual([]);
+  expect(bus.published.some((x) => x.topic === 'booster-addfunds.keys.request')).toBe(false);
+  client.dispose();
+});
+
+test('queryKeys: a failed direct fetch is no answer (null)', async () => {
+  const bus = makeBus(); const sb = { bus } as any;
+  const keysConfig = { get: () => ({ paymentId: 'paypalych-sbp', storeCountry: 'RU' }) };
+  const fetchKeysDirect = async () => null;
+  const client = createKeysClient(sb, { timeoutMs: 500, retryMs: 100, keysConfig, fetchKeysDirect } as any);
+  expect(await client.queryKeys({ kind: 'app', id: 1909950 }, new AbortController().signal)).toBeNull();
+  client.dispose();
+});
+
+test('queryKeys: an empty direct answer is [] — no keys, not a failure', async () => {
+  const bus = makeBus(); const sb = { bus } as any;
+  const keysConfig = { get: () => ({ paymentId: 'paypalych-sbp', storeCountry: 'RU' }) };
+  const fetchKeysDirect = async () => [];
+  const client = createKeysClient(sb, { timeoutMs: 500, retryMs: 100, keysConfig, fetchKeysDirect } as any);
+  expect(await client.queryKeys({ kind: 'app', id: 1909950 }, new AbortController().signal)).toEqual([]);
+  client.dispose();
+});
+
+test('queryKeys: a bus request that times out is no answer (null)', async () => {
+  const bus = makeBus(); const sb = { bus } as any;
+  const client = createKeysClient(sb, { timeoutMs: 100, retryMs: 1000 });
+  expect(await client.queryKeys({ kind: 'app', id: 1 }, new AbortController().signal)).toBeNull();
+  client.dispose();
+});
+
+// checkout answers `{ items: [], error: 'no-payment' }` when it can't resolve a
+// payment method — it couldn't look, so that is no answer either.
+test('queryKeys: checkout answering with an error is no answer (null)', async () => {
+  const bus = makeBus(); const sb = { bus } as any;
+  const client = createKeysClient(sb, { timeoutMs: 1000, retryMs: 1000 });
+  const p = client.queryKeys({ kind: 'app', id: 108710 }, new AbortController().signal);
+  await new Promise((r) => setTimeout(r, 5));
+  const req = bus.published.find((x) => x.topic === 'booster-addfunds.keys.request')!;
+  bus.emit('booster-checkout.keys.response', { reqId: req.data.reqId, appid: 108710, items: [], error: 'no-payment' });
+  expect(await p).toBeNull();
+  client.dispose();
+});
+
+test('queryKeys: an empty bus answer is [] — no keys, not a failure', async () => {
+  const bus = makeBus(); const sb = { bus } as any;
+  const client = createKeysClient(sb, { timeoutMs: 1000, retryMs: 1000 });
+  const p = client.queryKeys({ kind: 'app', id: 108710 }, new AbortController().signal);
+  await new Promise((r) => setTimeout(r, 5));
+  const req = bus.published.find((x) => x.topic === 'booster-addfunds.keys.request')!;
+  bus.emit('booster-checkout.keys.response', { reqId: req.data.reqId, appid: 108710, items: [] });
+  expect(await p).toEqual([]);
+  client.dispose();
+});
+
+test('requestKeys: checkout answering with an error still resolves []', async () => {
+  const bus = makeBus(); const sb = { bus } as any;
+  const client = createKeysClient(sb, { timeoutMs: 1000, retryMs: 1000 });
+  const p = client.requestKeys({ kind: 'app', id: 108710 }, new AbortController().signal);
+  await new Promise((r) => setTimeout(r, 5));
+  const req = bus.published.find((x) => x.topic === 'booster-addfunds.keys.request')!;
+  bus.emit('booster-checkout.keys.response', { reqId: req.data.reqId, appid: 108710, items: [], error: 'no-payment' });
+  expect(await p).toEqual([]);
+  client.dispose();
+});

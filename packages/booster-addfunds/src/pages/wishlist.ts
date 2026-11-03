@@ -15,7 +15,8 @@
 // mount, a debounced DOM watch rescans the rendered rows and (re)mounts
 // whatever is missing. Keys are asked once per app per page view — a row that
 // scrolls back in, or re-renders, is served from the cache. Several requests
-// run at once here, which keys-client supports (one waiter per reqId).
+// run at once here, which keys-client supports (one waiter per reqId); a
+// lookup that got no answer is asked again after a pause (retryLater).
 //
 // The chip, its styles and the purchase flow are lib/purchase-mount.ts's,
 // shared with the /app/ and package pages.
@@ -25,17 +26,25 @@ import { createKeysClient } from '../lib/keys-client';
 import { createPurchaseMounter, type KeysClient } from '../lib/purchase-mount';
 import { findOffer } from '../lib/edition-match';
 import type { KeyItem } from '../lib/keys-api';
+import type { KeysTarget } from '../lib/keys-target';
 import { WISHLIST_ROW_SELECTOR, readRowAppId, findPurchaseColumn, readPurchaseOption } from '../lib/wishlist-row';
+
+interface WishlistKeysClient extends KeysClient {
+  /** Keys, [] for "none", or null when no answer came back (lib/keys-client.ts). */
+  queryKeys(target: KeysTarget, signal: AbortSignal): Promise<KeyItem[] | null>;
+}
 
 interface WishlistPageDeps {
   /** Keys transport seam. Default: the real bus client `createKeysClient(sb)`. */
-  keysClient?: KeysClient;
+  keysClient?: WishlistKeysClient;
   /** Email-entry modal seam. Default: the real `openEmailModal`. */
   openEmailModal?: () => Promise<string | null>;
   /** Purchase-error modal seam. Default: the real `openErrorModal`. */
   openErrorModal?: (message: string) => void;
   /** Delay between a DOM mutation and the row rescan, ms. Tests pass 0. */
   scanDelayMs?: number;
+  /** Pause before asking again about an app whose lookup got no answer, ms. */
+  retryDelayMs?: number;
   /** DOM-change subscription seam; returns the unsubscribe. Default: a
    *  MutationObserver on document.body. Tests drive it by hand because
    *  happy-dom holds an observer's callback through a WeakRef, so it goes
@@ -63,11 +72,20 @@ const SCAN_DELAY_MS = 50;
 // each in-flight request is also re-published every second until answered.
 const MAX_IN_FLIGHT = 4;
 
+// A lookup that got no answer (bus timeout — on a cold start checkout's main
+// shell may come up after the first round timed out — or a failed fetch) is
+// asked again after a pause, a few times at most: a backend that stays down
+// isn't asked about every visible row forever. The pause also keeps a DOM
+// change from re-asking right away.
+const RETRY_DELAY_MS = 10_000;
+const MAX_LOOKUPS = 3;
+
 const rowSelectorFor = (appid: number): string => `[data-rfd-draggable-id^="WishlistItem-${appid}-"]`;
 
 export function registerWishlistPage(sb: SbApi, deps: WishlistPageDeps = {}): void {
   const keysClient = deps.keysClient ?? createKeysClient(sb);
   const scanDelayMs = deps.scanDelayMs ?? SCAN_DELAY_MS;
+  const retryDelayMs = deps.retryDelayMs ?? RETRY_DELAY_MS;
   const watchDom = deps.watchDom ?? watchBody;
   const mount = createPurchaseMounter(sb, {
     keysClient,
@@ -77,6 +95,8 @@ export function registerWishlistPage(sb: SbApi, deps: WishlistPageDeps = {}): vo
 
   function mountList(ctx: PageContext): () => void {
     const offers = new Map<number, Promise<KeyItem[]>>();
+    // App → its lookups that got no answer so far.
+    const unanswered = new Map<number, number>();
     // Row element → the app its chip sells + that chip's teardown.
     const chips = new Map<HTMLElement, { appid: number; teardown: () => void }>();
     const pending = new Set<HTMLElement>();
@@ -93,8 +113,19 @@ export function registerWishlistPage(sb: SbApi, deps: WishlistPageDeps = {}): vo
       while (inFlight < MAX_IN_FLIGHT && queue.length > 0) queue.shift()!();
     }
 
-    // Keys for one app, asked once per page view and served from the cache when
-    // its row scrolls back in or re-renders. Never rejects.
+    // No answer for this app: [] stands in its cache entry for the pause, then
+    // the entry is dropped and a rescan asks again for its row if still shown.
+    function retryLater(appid: number): void {
+      const n = (unanswered.get(appid) ?? 0) + 1;
+      unanswered.set(appid, n);
+      if (n >= MAX_LOOKUPS) return;           // give up: [] for the page view
+      // schedule() is a no-op once torn down.
+      setTimeout(() => { offers.delete(appid); schedule(); }, retryDelayMs);
+    }
+
+    // Keys for one app, asked once per page view (again only after no answer,
+    // see retryLater) and served from the cache when its row scrolls back in or
+    // re-renders. Never rejects.
     function offersFor(appid: number): Promise<KeyItem[]> {
       const cached = offers.get(appid);
       if (cached) return cached;
@@ -110,9 +141,14 @@ export function registerWishlistPage(sb: SbApi, deps: WishlistPageDeps = {}): vo
           return;
         }
         inFlight++;
-        keysClient.requestKeys({ kind: 'app', id: appid }, ctx.signal)
-          .catch((): KeyItem[] => [])
-          .then((items) => { inFlight--; resolve(items); drain(); });
+        keysClient.queryKeys({ kind: 'app', id: appid }, ctx.signal)
+          .catch((): null => null)
+          .then((items) => {
+            inFlight--;
+            if (items == null) retryLater(appid);
+            resolve(items ?? []);
+            drain();
+          });
       });
       drain();
       return p;
@@ -123,7 +159,13 @@ export function registerWishlistPage(sb: SbApi, deps: WishlistPageDeps = {}): vo
       if (appid == null || pending.has(row)) return;
       const mounted = chips.get(row);
       if (mounted) {
-        if (mounted.appid === appid && row.querySelector('.booster-eo')) return;
+        const chip = row.querySelector<HTMLElement>('.booster-eo');
+        if (mounted.appid === appid && chip) {
+          // React appends a child it swaps for another type (cart button →
+          // «in cart») after our chip; put the chip back at the bottom.
+          if (chip.nextElementSibling) chip.parentElement?.appendChild(chip);
+          return;
+        }
         // React re-rendered the column (chip gone) or reused the row for
         // another app — drop the stale entry and mount afresh.
         mounted.teardown();
