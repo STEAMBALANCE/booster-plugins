@@ -83,6 +83,10 @@ export function installKeysBridge(sb: SbApi, deps: KeysBridgeDeps): () => void {
       const paymentId = await resolveKeysPaymentId(sb, fetchImpl);
       if (!paymentId) { sb.bus.publish('booster-checkout.keys.response', { reqId, ...echo, items: [], error: 'no-payment' }); return; }
       const items = await fetchKeys(sb, { target, paymentId, storeCountry });
+      // A failed lookup carries an `error` (addfunds' keys-client reads it as no
+      // answer and asks again); `items: []` keeps older addfunds builds, which
+      // ignore `error`, on the "no keys" they always got.
+      if (items == null) { sb.bus.publish('booster-checkout.keys.response', { reqId, ...echo, items: [], error: 'fetch-failed' }); return; }
       sb.bus.publish('booster-checkout.keys.response', { reqId, ...echo, items });
     })();
   }));

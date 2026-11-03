@@ -46,8 +46,22 @@ describe('fetchKeys', () => {
     await fetchKeys(sb, { target: { kind: 'app', id: 1 }, paymentId: 'p' });
     expect(state.url).not.toContain('store_country');
   });
-  test('http error → []', async () => {
+  // A failure is no answer (null), not "no keys" ([]): the bridge reports it
+  // with an `error`, so a store tab asks again later instead of settling on [].
+  test('http error → null (no answer)', async () => {
     const { sb } = fakeSb(null, false);
+    expect(await fetchKeys(sb, { target: { kind: 'app', id: 1 }, paymentId: 'p' })).toBeNull();
+  });
+  test('malformed body (no data.items array) → null (no answer)', async () => {
+    const { sb } = fakeSb({ success: true });
+    expect(await fetchKeys(sb, { target: { kind: 'app', id: 1 }, paymentId: 'p' })).toBeNull();
+  });
+  test('never throws — a network error → null (no answer)', async () => {
+    const sb = { version: '1.0.0', net: { fetch: async () => { throw new Error('network down'); } } } as any;
+    expect(await fetchKeys(sb, { target: { kind: 'app', id: 1 }, paymentId: 'p' })).toBeNull();
+  });
+  test('an empty items array → [] (no keys, a final answer)', async () => {
+    const { sb } = fakeSb({ success: true, data: { items: [] } });
     expect(await fetchKeys(sb, { target: { kind: 'app', id: 1 }, paymentId: 'p' })).toEqual([]);
   });
 

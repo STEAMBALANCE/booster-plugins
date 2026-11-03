@@ -1,7 +1,7 @@
 // Direct sb.net fetch of the steam-keys list — mirrors booster-checkout's
 // main/keys-fetch.ts::fetchKeys (same endpoint, same query shape, same
-// never-throw contract), except that a failure resolves null — no answer —
-// rather than [], which means "no keys for this product". Used by
+// never-throw contract: a failure resolves null — no answer — rather than [],
+// which means "no keys for this product"). Used by
 // lib/keys-client.ts's queryKeys/requestKeys when checkout has broadcast a
 // usable paymentId (lib/keys-config.ts); otherwise the bus round-trip
 // (requestKeysViaBus) stays the source of truth.

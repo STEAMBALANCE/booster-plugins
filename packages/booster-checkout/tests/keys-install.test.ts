@@ -77,6 +77,28 @@ describe('installKeysBridge', () => {
     expect((resp!.data as any).items[0].itemId).toBe(7);
   });
 
+  // A failed lookup must not read as "no keys": the store tab (addfunds
+  // keys-client) treats an `error` as no answer and asks again later. `items: []`
+  // stays for older addfunds builds that ignore `error`.
+  test('a failed keys fetch answers with an error, not a bare empty list', async () => {
+    const bus = makeBus();
+    const netFetch = (async () => ({ ok: false, status: 502, headers: {}, json: async () => ({}), text: async () => '' })) as any;
+    installKeysBridge(makeSb(bus, { country: 'RU', netFetch }), { openPayment: async () => true, fetchImpl: paymentsFetch });
+    bus.publish('booster-addfunds.keys.request', { reqId: 'r1', appid: 108710 });
+    await new Promise((r) => setTimeout(r, 5));
+    const resp = bus.published.find((p) => p.topic === 'booster-checkout.keys.response');
+    expect(resp?.data).toEqual({ reqId: 'r1', appid: 108710, items: [], error: 'fetch-failed' });
+  });
+
+  test('an empty keys list answers without an error', async () => {
+    const bus = makeBus();
+    installKeysBridge(makeSb(bus, { country: 'RU' }), { openPayment: async () => true, fetchImpl: paymentsFetch });
+    bus.publish('booster-addfunds.keys.request', { reqId: 'r1', appid: 108710 });
+    await new Promise((r) => setTimeout(r, 5));
+    const resp = bus.published.find((p) => p.topic === 'booster-checkout.keys.response');
+    expect(resp?.data).toEqual({ reqId: 'r1', appid: 108710, items: [] });
+  });
+
   test('purchase with steam email → opens payment, ok result', async () => {
     const bus = makeBus();
     const order = { success: true, data: { redirectUrl: 'https://pay/x', uid: 'u' } };

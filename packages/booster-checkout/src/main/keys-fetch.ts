@@ -73,19 +73,23 @@ export function readKeysTarget(d: Record<string, unknown>): KeysTarget | null {
   return null;
 }
 
+/** The keys list, [] when there are none, or null when the lookup failed (HTTP
+ *  error, malformed body, network error) — no answer, which the bridge reports
+ *  as such so the store tab asks again instead of settling on "no keys".
+ *  Never throws. */
 export async function fetchKeys(
   sb: SbApi,
   args: { target: KeysTarget; paymentId: string; storeCountry?: string },
-): Promise<KeyItem[]> {
+): Promise<KeyItem[] | null> {
   try {
     // One query field per Steam id space — see KeysTarget above.
     const q = new URLSearchParams({ paymentId: args.paymentId, [keysTargetParam(args.target)]: String(args.target.id) });
     if (args.storeCountry) q.set('store_country', args.storeCountry);
     const r = await sb.net.fetch(`${URLS.steamKeysApi}?${q.toString()}`, { method: 'GET' });
-    if (!r.ok) return [];
+    if (!r.ok) return null;
     const body = await r.json() as unknown;
     const items = (body as { data?: { items?: unknown } })?.data?.items;
-    if (!Array.isArray(items)) return [];
+    if (!Array.isArray(items)) return null;
     return items.map(toKeyItem).filter((x): x is KeyItem => x !== null);
-  } catch { return []; }
+  } catch { return null; }
 }
